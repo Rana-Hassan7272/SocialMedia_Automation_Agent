@@ -26,6 +26,7 @@ logger = get_logger(__name__)
 DEMO_URL = "https://tinyurl.com/signaldraft"
 LIVE_URL = "https://signaldraft.streamlit.app/"
 GITHUB_URL = "https://github.com/Rana-Hassan7272/SocialMedia_Automation_Agent"
+CONTACT_EMAIL = "ssc.shahbaz.2004@gmail.com"
 
 PHASE_LABELS = {
     WorkflowPhase.PENDING.value: "Starting",
@@ -331,12 +332,17 @@ def render_demo_and_access():
         The app is live and fully built. X API is <em>pay-as-you-go</em> — new accounts need
         billing enabled on the X Developer Portal before posting works.
         <br><br>
-        Want to use SignalDraft? Contact me directly and I will enable your account.
+        Want to use SignalDraft? Email <a href="mailto:ssc.shahbaz.2004@gmail.com">ssc.shahbaz.2004@gmail.com</a>
+        and I will enable your account.
         </div>
         """,
         unsafe_allow_html=True,
     )
-    st.link_button("Contact via GitHub", GITHUB_URL, type="secondary")
+    col_a, col_b = st.columns(2)
+    with col_a:
+        st.link_button("Email for access", f"mailto:{CONTACT_EMAIL}", type="primary")
+    with col_b:
+        st.link_button("GitHub", GITHUB_URL, type="secondary")
 
 
 def render_login():

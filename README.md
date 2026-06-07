@@ -16,6 +16,7 @@
 |---|---|
 | **Live app** | [signaldraft.streamlit.app](https://signaldraft.streamlit.app/) |
 | **Full demo** | [tinyurl.com/signaldraft](https://tinyurl.com/signaldraft) |
+| **Contact** | [ssc.shahbaz.2004@gmail.com](mailto:ssc.shahbaz.2004@gmail.com) |
 | **Source code** | [github.com/Rana-Hassan7272/SocialMedia_Automation_Agent](https://github.com/Rana-Hassan7272/SocialMedia_Automation_Agent) |
 
 > The demo shows the complete flow: topic → multi-source research → AI draft → human approval → automatic post to X.
@@ -79,7 +80,7 @@ SignalDraft is **fully built and deployed**. The engineering work is done:
 
 **What remains is operational, not development:** X (Twitter) API is **pay-as-you-go**. Free-tier API access does not support full multi-user OAuth posting for the public. Enabling posting for a new user requires X Developer billing to be activated for that account.
 
-**Want access?** Contact me directly — I enable accounts on request.
+**Want access?** Email [ssc.shahbaz.2004@gmail.com](mailto:ssc.shahbaz.2004@gmail.com) — I enable accounts on request.
 
 ---
 
@@ -100,29 +101,17 @@ It shows:
 
 ## Architecture
 
-```mermaid
-flowchart LR
-    A[Your topic] --> B[Intent Agent]
-    B --> C[Research Agent]
-    C --> D[HN + RSS]
-    D --> E[Filter → Summarize → Draft]
-    E --> F{You approve?}
-    F -->|Yes| G[Publish to X]
-    F -->|Revise| E
-    F -->|Reject| H[Discard]
 ```
-
-### Agent pipeline
-
-```
-User query
-    → Intent      (topic, scope, tone)
-    → Research    (Hacker News + RSS)
-    → Filter      (top signals by relevance)
-    → Summarize   (key insights + trends)
-    → Draft       (≤280 char tweet)
-    → Human review (approve / revise / reject)
-    → Publish     (your X account via OAuth)
+Your topic
+    → Intent Agent        (topic, scope, tone)
+    → Research Agent      (Hacker News + RSS)
+    → Filter              (top signals by relevance)
+    → Summarize           (key insights + trends)
+    → Draft               (≤280 char tweet)
+    → Human review        (approve / revise / reject)
+         ├─ Approve  → Publish to X
+         ├─ Revise   → Draft (loop)
+         └─ Reject   → Discard
 ```
 
 ---
@@ -200,8 +189,9 @@ Research works without Reddit keys — Hacker News + RSS need no registration.
 
 ## Contact & access
 
-SignalDraft is production-ready. To use it with your X account, **contact me** and I will enable API access for you.
+SignalDraft is production-ready. To use it with your X account, email me and I will enable API access for you.
 
+- **Email:** [ssc.shahbaz.2004@gmail.com](mailto:ssc.shahbaz.2004@gmail.com)
 - **GitHub:** [Rana-Hassan7272/SocialMedia_Automation_Agent](https://github.com/Rana-Hassan7272/SocialMedia_Automation_Agent)
 - **Live app:** [signaldraft.streamlit.app](https://signaldraft.streamlit.app/)
 - **Demo:** [tinyurl.com/signaldraft](https://tinyurl.com/signaldraft)
