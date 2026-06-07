@@ -168,8 +168,10 @@ class DatabaseManager:
         self,
         state: str,
         code_verifier: str,
-        redirect_uri: str,
+        redirect_uri: Optional[str] = None,
     ) -> None:
+        if redirect_uri is None:
+            redirect_uri = get_settings().twitter_callback_url.rstrip("/")
         cutoff = datetime.utcnow() - timedelta(minutes=15)
         payload = json.dumps({"v": code_verifier, "r": redirect_uri.rstrip("/")})
         with self.get_session() as session:

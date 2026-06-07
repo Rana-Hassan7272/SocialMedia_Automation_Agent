@@ -61,15 +61,18 @@ def init_session():
             st.session_state[key] = value
 
 
+DB_CACHE_VERSION = "pkce-v2"
+
+
 @st.cache_resource
-def get_db():
+def get_db(_cache_version: str = DB_CACHE_VERSION):
     db = DatabaseManager()
     db.initialize_database()
     return db
 
 
 @st.cache_resource
-def get_workflow_graph():
+def get_workflow_graph(_cache_version: str = DB_CACHE_VERSION):
     return WorkflowGraph(
         db_manager=get_db(),
         reddit_client=RedditClient(),
