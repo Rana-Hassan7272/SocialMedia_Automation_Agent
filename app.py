@@ -7,6 +7,7 @@ from src.auth.oauth import (
     fetch_x_user_profile,
     start_oauth_flow,
     token_expires_at,
+    unpack_oauth_state,
 )
 from src.config import get_settings
 from src.database import DatabaseManager
@@ -61,7 +62,7 @@ def init_session():
             st.session_state[key] = value
 
 
-DB_CACHE_VERSION = "pkce-v2"
+DB_CACHE_VERSION = "oauth-v3"
 
 
 @st.cache_resource
@@ -101,33 +102,35 @@ def _app_base_url() -> str:
     return configured
 
 
-def handle_oauth_callback(db: DatabaseManager):
+def handle_oauth_callback(db: DatabaseManager) -> bool:
     params = st.query_params
     oauth_error = _query_param(params, "error")
     if oauth_error:
         detail = _query_param(params, "error_description") or oauth_error
         st.session_state["oauth_error"] = f"X authorization failed: {detail}"
         st.query_params.clear()
-        return
+        return True
     code = _query_param(params, "code")
     state = _query_param(params, "state")
     if not code or not state:
-        return
+        return False
     if st.session_state.get("oauth_handled_code") == code:
-        return
-    st.session_state["oauth_handled_code"] = code
-    pkce = db.get_oauth_pkce(state)
-    if not pkce:
+        if st.session_state.get("user_id"):
+            st.query_params.clear()
+            return True
         st.session_state.pop("oauth_handled_code", None)
-        st.session_state["oauth_error"] = (
-            "OAuth session not found. Click **Connect with X** again, then authorize "
-            "in the new tab without waiting more than 15 minutes."
-        )
-        st.query_params.clear()
-        return
-    redirect_uri = pkce.get("redirect_uri") or _app_base_url()
     try:
-        with st.spinner("Completing X login..."):
+        pkce = unpack_oauth_state(state)
+    except ValueError as exc:
+        pkce = db.get_oauth_pkce(state)
+        if not pkce:
+            st.session_state["oauth_error"] = str(exc)
+            st.query_params.clear()
+            return True
+    redirect_uri = pkce.get("redirect_uri") or _app_base_url()
+    st.session_state["oauth_handled_code"] = code
+    try:
+        with st.spinner("Completing X login — please wait..."):
             token_data = exchange_code_for_token(
                 code,
                 pkce["code_verifier"],
@@ -148,12 +151,13 @@ def handle_oauth_callback(db: DatabaseManager):
                 user_id=user.id,
                 x_username=user.x_username,
             )
-        db.delete_oauth_pkce(state)
+            db.delete_oauth_pkce(state)
         st.session_state.user_id = user.id
         st.session_state.x_username = user.x_username
         st.session_state.pop("x_auth_url", None)
         st.session_state.pop("oauth_error", None)
         st.session_state.pop("oauth_handled_code", None)
+        st.session_state["oauth_success"] = user.x_username
         st.query_params.clear()
         st.rerun()
     except Exception as exc:
@@ -161,6 +165,7 @@ def handle_oauth_callback(db: DatabaseManager):
         st.session_state.pop("oauth_handled_code", None)
         st.session_state["oauth_error"] = f"X login failed: {exc}"
         st.query_params.clear()
+    return True
 
 
 def disconnect_x(db: DatabaseManager):
@@ -221,14 +226,12 @@ def render_login():
         try:
             st.session_state.pop("oauth_handled_code", None)
             st.session_state.pop("oauth_error", None)
-            auth_url, oauth_state, code_verifier = start_oauth_flow(
-                redirect_uri=callback_url
-            )
-            get_db().save_oauth_pkce(oauth_state, code_verifier, callback_url)
+            st.session_state.pop("oauth_success", None)
+            auth_url = start_oauth_flow(redirect_uri=callback_url)
             st.session_state["x_auth_url"] = auth_url
             st.rerun()
         except Exception as exc:
-            st.error(friendly_error(exc))
+            st.error(str(exc))
 
     pending_auth = st.session_state.get("x_auth_url")
     if pending_auth:
@@ -237,15 +240,16 @@ def render_login():
             pending_auth,
             type="primary",
         )
+        st.warning(
+            "**Important:** After you approve on X, stay in the tab X redirects you to. "
+            "Do not go back to this tab — login completes only in the redirect tab."
+        )
         st.caption(
-            "Must open in a **new tab** — Streamlit cannot embed X login. "
-            "After you approve on X, you land back on SignalDraft logged in."
+            "On X you must click **Authorize app** (not just log in). "
+            "Then you return here logged in as @your_username."
         )
         with st.expander("Link not working? Copy URL manually"):
             st.code(pending_auth, language=None)
-            st.write(
-                "Paste the URL above into a **new browser tab** (Chrome: Ctrl+L, paste, Enter)."
-            )
 
 
 def render_workflow_status(db: DatabaseManager, workflow_id: int, status_slot):
@@ -460,10 +464,17 @@ def main():
     st.set_page_config(page_title="SignalDraft", page_icon="🐦", layout="centered")
     init_session()
     db = get_db()
-    handle_oauth_callback(db)
+    callback_active = handle_oauth_callback(db)
 
     st.title("SignalDraft")
     st.caption("Hacker News + RSS research → AI draft → publish to your X account")
+
+    oauth_success = st.session_state.pop("oauth_success", None)
+    if oauth_success:
+        st.success(f"Connected as **@{oauth_success}**. You can create posts below.")
+
+    if callback_active and not st.session_state.user_id:
+        return
 
     if not st.session_state.user_id:
         render_login()

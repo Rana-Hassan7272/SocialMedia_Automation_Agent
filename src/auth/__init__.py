@@ -3,10 +3,10 @@ from .oauth import (
     build_authorization_url,
     exchange_code_for_token,
     fetch_x_user_profile,
-    generate_code_verifier,
-    generate_oauth_state,
+    pack_oauth_state,
     start_oauth_flow,
     token_expires_at,
+    unpack_oauth_state,
 )
 
 __all__ = [
@@ -15,8 +15,8 @@ __all__ = [
     "encrypt_value",
     "exchange_code_for_token",
     "fetch_x_user_profile",
-    "generate_code_verifier",
-    "generate_oauth_state",
+    "pack_oauth_state",
     "start_oauth_flow",
     "token_expires_at",
+    "unpack_oauth_state",
 ]

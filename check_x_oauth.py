@@ -1,4 +1,4 @@
-from src.auth.oauth import build_authorization_url, generate_code_verifier, generate_oauth_state
+from src.auth.oauth import start_oauth_flow
 from src.config import get_settings
 
 
@@ -18,13 +18,15 @@ def main():
         print("Use OAuth 2.0 Client ID from X portal (NOT the OAuth 1.0 API Key).")
         return
 
+    if not settings.encryption_key:
+        print("\nFAIL: ENCRYPTION_KEY required for OAuth state signing")
+        return
+
     if len(client_id) < 20:
         print("\nWARN: Client ID looks too short.")
         print("TWITTER_CLIENT_ID must be OAuth 2.0 Client ID, not OAuth 1.0 API Key.")
 
-    state = generate_oauth_state()
-    verifier = generate_code_verifier()
-    url = build_authorization_url(state, verifier)
+    url = start_oauth_flow(redirect_uri=callback)
 
     print("\nX Developer Portal must have:")
     print("  - User authentication: OAuth 2.0 ON")
