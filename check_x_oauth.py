@@ -36,7 +36,7 @@ def main():
             print(result["authorize_url"][:140] + "...")
     except Exception as exc:
         print(f"\nProbe failed: {exc}")
-        url, _, _ = start_oauth_flow()
+        url = start_oauth_flow()
         print(url[:140] + "...")
 
 

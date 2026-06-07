@@ -7,6 +7,7 @@ from src.auth.oauth import (
     fetch_x_user_profile,
     start_oauth_flow,
     token_expires_at,
+    unpack_oauth_state,
 )
 from src.config import get_settings
 from src.database import DatabaseManager
@@ -76,7 +77,7 @@ def restore_user_session(db: DatabaseManager):
         st.session_state.sd_session = token
 
 
-DB_CACHE_VERSION = "oauth-v5"
+DB_CACHE_VERSION = "oauth-v6"
 
 
 @st.cache_resource
@@ -142,22 +143,21 @@ def handle_oauth_callback(db: DatabaseManager) -> bool:
             st.query_params.clear()
             return True
         st.session_state.pop("oauth_handled_code", None)
-    pkce = db.get_oauth_pkce(state)
-    if not pkce:
-        st.session_state["oauth_error"] = (
-            "OAuth session not found in database. Click **Authorize SignalDraft on X** "
-            "again and complete within 15 minutes."
-        )
-        st.query_params.clear()
-        return True
-    redirect_uri = pkce.get("redirect_uri") or get_settings().twitter_callback_url.strip()
+    try:
+        pkce = unpack_oauth_state(state)
+    except ValueError as exc:
+        pkce = db.get_oauth_pkce(state)
+        if not pkce:
+            st.session_state["oauth_error"] = str(exc)
+            st.query_params.clear()
+            return True
+    redirect_uri = pkce["redirect_uri"]
     st.session_state["oauth_handled_code"] = code
     try:
         with st.spinner("Completing X login — please wait..."):
             token_data = exchange_code_for_token(
                 code,
                 pkce["code_verifier"],
-                state=state,
                 redirect_uri=redirect_uri,
             )
             access_token = token_data["access_token"]
@@ -174,7 +174,6 @@ def handle_oauth_callback(db: DatabaseManager) -> bool:
                 user_id=user.id,
                 x_username=user.x_username,
             )
-            db.delete_oauth_pkce(state)
         session_token = db.create_app_session(user.id)
         st.session_state.user_id = user.id
         st.session_state.x_username = user.x_username
@@ -189,7 +188,9 @@ def handle_oauth_callback(db: DatabaseManager) -> bool:
     except Exception as exc:
         logger.exception("OAuth callback failed")
         st.session_state.pop("oauth_handled_code", None)
-        st.session_state["oauth_error"] = f"X login failed: {exc}"
+        st.session_state["oauth_error"] = (
+            f"X login failed: {exc} (redirect_uri used: `{redirect_uri}`)"
+        )
         st.query_params.clear()
     return True
 
@@ -227,7 +228,7 @@ def render_login():
         st.error("Server missing ENCRYPTION_KEY for secure token storage.")
         return
 
-    callback_url = get_settings().twitter_callback_url.strip()
+    callback_url = _app_base_url()
     st.caption(f"OAuth callback URL: `{callback_url}`")
     oauth_error = st.session_state.get("oauth_error")
     if oauth_error:
@@ -253,11 +254,18 @@ def render_login():
     )
 
     st.markdown("#### Step 2 — Authorize SignalDraft")
-    try:
-        auth_url, oauth_state, code_verifier = start_oauth_flow(redirect_uri=callback_url)
-        get_db().save_oauth_pkce(oauth_state, code_verifier, callback_url)
-    except Exception as exc:
-        st.error(str(exc))
+    if st.button("Prepare authorization link", type="primary"):
+        try:
+            st.session_state.pop("oauth_handled_code", None)
+            st.session_state.pop("oauth_error", None)
+            st.session_state["x_auth_url"] = start_oauth_flow(redirect_uri=callback_url)
+            st.rerun()
+        except Exception as exc:
+            st.error(str(exc))
+
+    auth_url = st.session_state.get("x_auth_url")
+    if not auth_url:
+        st.caption("Click **Prepare authorization link** first, then open X in the new tab.")
         return
 
     st.markdown(

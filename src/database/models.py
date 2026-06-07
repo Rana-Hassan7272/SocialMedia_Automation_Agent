@@ -110,7 +110,7 @@ class OAuthPkceSession(Base):
     """Temporary PKCE verifier storage for X OAuth callback."""
     __tablename__ = "oauth_pkce_sessions"
 
-    state: Mapped[str] = mapped_column(String(128), primary_key=True)
+    state: Mapped[str] = mapped_column(String(64), primary_key=True)
     code_verifier_encrypted: Mapped[str] = mapped_column(Text, nullable=False)
     created_at: Mapped[datetime] = mapped_column(
         DateTime,
