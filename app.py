@@ -76,7 +76,7 @@ def restore_user_session(db: DatabaseManager):
         st.session_state.sd_session = token
 
 
-DB_CACHE_VERSION = "oauth-v4"
+DB_CACHE_VERSION = "oauth-v5"
 
 
 @st.cache_resource
@@ -150,7 +150,7 @@ def handle_oauth_callback(db: DatabaseManager) -> bool:
         )
         st.query_params.clear()
         return True
-    redirect_uri = pkce.get("redirect_uri") or _app_base_url()
+    redirect_uri = pkce.get("redirect_uri") or get_settings().twitter_callback_url.strip()
     st.session_state["oauth_handled_code"] = code
     try:
         with st.spinner("Completing X login — please wait..."):
@@ -227,7 +227,8 @@ def render_login():
         st.error("Server missing ENCRYPTION_KEY for secure token storage.")
         return
 
-    callback_url = _app_base_url()
+    callback_url = get_settings().twitter_callback_url.strip()
+    st.caption(f"OAuth callback URL: `{callback_url}`")
     oauth_error = st.session_state.get("oauth_error")
     if oauth_error:
         st.error(oauth_error)

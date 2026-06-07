@@ -171,9 +171,9 @@ class DatabaseManager:
         redirect_uri: Optional[str] = None,
     ) -> None:
         if redirect_uri is None:
-            redirect_uri = get_settings().twitter_callback_url.rstrip("/")
+            redirect_uri = get_settings().twitter_callback_url.strip()
         cutoff = datetime.utcnow() - timedelta(minutes=15)
-        payload = json.dumps({"v": code_verifier, "r": redirect_uri.rstrip("/")})
+        payload = json.dumps({"v": code_verifier, "r": redirect_uri.strip()})
         with self.get_session() as session:
             stale = select(OAuthPkceSession).where(OAuthPkceSession.created_at < cutoff)
             for row in session.scalars(stale).all():
