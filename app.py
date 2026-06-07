@@ -1,6 +1,8 @@
+import json
 import time
 
 import streamlit as st
+import streamlit.components.v1 as components
 
 from src.auth.oauth import (
     exchange_code_for_token,
@@ -113,6 +115,7 @@ def handle_oauth_callback(db: DatabaseManager):
         )
         st.session_state.user_id = user.id
         st.session_state.x_username = user.x_username
+        st.session_state.pop("x_auth_url", None)
         st.query_params.clear()
         st.rerun()
     except Exception as exc:
@@ -154,19 +157,19 @@ def render_login():
         try:
             auth_url, oauth_state, code_verifier = start_oauth_flow()
             get_db().save_oauth_pkce(oauth_state, code_verifier)
-            st.session_state["x_auth_redirect"] = auth_url
-            st.rerun()
+            st.session_state["x_auth_url"] = auth_url
+            components.html(
+                f"<script>window.top.location.href = {json.dumps(auth_url)};</script>",
+                height=0,
+                width=0,
+            )
         except Exception as exc:
             st.error(friendly_error(exc))
 
-    redirect_url = st.session_state.get("x_auth_redirect")
-    if redirect_url:
-        st.session_state.pop("x_auth_redirect", None)
-        st.markdown(
-            f'<meta http-equiv="refresh" content="0;url={redirect_url}">',
-            unsafe_allow_html=True,
-        )
-        st.link_button("Open X authorization", redirect_url, type="primary")
+    pending_auth = st.session_state.get("x_auth_url")
+    if pending_auth:
+        st.link_button("Open X authorization", pending_auth, type="primary")
+        st.caption("Opens X in your browser. After approving, you return here automatically.")
 
 
 def render_workflow_status(db: DatabaseManager, workflow_id: int, status_slot):
