@@ -1,8 +1,6 @@
-import json
 import time
 
 import streamlit as st
-import streamlit.components.v1 as components
 
 from src.auth.oauth import (
     exchange_code_for_token,
@@ -86,19 +84,45 @@ def _query_param(params, name: str):
     return value
 
 
+def _app_base_url() -> str:
+    settings = get_settings()
+    configured = settings.twitter_callback_url.rstrip("/")
+    try:
+        headers = st.context.headers
+        host = headers.get("X-Forwarded-Host") or headers.get("Host") or ""
+        if host and "localhost" not in host:
+            proto = headers.get("X-Forwarded-Proto", "https")
+            return f"{proto}://{host}".rstrip("/")
+    except Exception:
+        pass
+    return configured
+
+
 def handle_oauth_callback(db: DatabaseManager):
     params = st.query_params
+    oauth_error = _query_param(params, "error")
+    if oauth_error:
+        detail = _query_param(params, "error_description") or oauth_error
+        st.error(f"X authorization failed: {detail}")
+        st.caption(
+            f"Confirm this callback URL is in your X Developer Portal: `{_app_base_url()}`"
+        )
+        st.query_params.clear()
+        return
     code = _query_param(params, "code")
     state = _query_param(params, "state")
     if not code or not state:
         return
+    redirect_uri = _app_base_url()
     try:
         verifier = db.consume_oauth_pkce(state)
         if not verifier:
             st.error("OAuth session expired or invalid. Click Connect with X again.")
             st.query_params.clear()
             return
-        token_data = exchange_code_for_token(code, verifier, state=state)
+        token_data = exchange_code_for_token(
+            code, verifier, state=state, redirect_uri=redirect_uri
+        )
         access_token = token_data["access_token"]
         profile = fetch_x_user_profile(access_token)
         user = db.upsert_user(profile["x_user_id"], profile["x_username"])
@@ -153,23 +177,44 @@ def render_login():
     if not settings.encryption_key:
         st.error("Server missing ENCRYPTION_KEY for secure token storage.")
         return
+
+    callback_url = _app_base_url()
+    configured = settings.twitter_callback_url.rstrip("/")
+    if callback_url != configured:
+        st.warning(
+            f"Detected app URL `{callback_url}` differs from TWITTER_CALLBACK_URL "
+            f"`{configured}`. OAuth will use the detected URL."
+        )
+    st.caption(f"OAuth callback URL: `{callback_url}`")
+
     if st.button("Connect with X", type="primary"):
         try:
-            auth_url, oauth_state, code_verifier = start_oauth_flow()
+            auth_url, oauth_state, code_verifier = start_oauth_flow(
+                redirect_uri=callback_url
+            )
             get_db().save_oauth_pkce(oauth_state, code_verifier)
             st.session_state["x_auth_url"] = auth_url
-            components.html(
-                f"<script>window.top.location.href = {json.dumps(auth_url)};</script>",
-                height=0,
-                width=0,
-            )
         except Exception as exc:
             st.error(friendly_error(exc))
 
     pending_auth = st.session_state.get("x_auth_url")
     if pending_auth:
-        st.link_button("Open X authorization", pending_auth, type="primary")
-        st.caption("Opens X in your browser. After approving, you return here automatically.")
+        st.markdown(
+            f'<p style="margin-top:1rem;">'
+            f'<a href="{pending_auth}" target="_self" rel="noopener noreferrer" '
+            f'style="display:inline-block;padding:0.6rem 1.2rem;background:#1DA1F2;'
+            f'color:white;text-decoration:none;border-radius:0.4rem;font-weight:600;">'
+            f"Continue to X authorization →</a></p>",
+            unsafe_allow_html=True,
+        )
+        st.caption(
+            "Click the blue button above (same tab). After approving on X, you return here logged in."
+        )
+        st.info(
+            "If X shows an error, add this **exact** callback URL in X Developer Portal → "
+            "User authentication settings: "
+            f"`{callback_url}`"
+        )
 
 
 def render_workflow_status(db: DatabaseManager, workflow_id: int, status_slot):

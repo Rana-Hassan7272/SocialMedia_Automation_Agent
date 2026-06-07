@@ -29,18 +29,25 @@ def _code_challenge(code_verifier: str) -> str:
     return base64.urlsafe_b64encode(digest).rstrip(b"=").decode("ascii")
 
 
-def _redirect_uri() -> str:
+def resolve_redirect_uri(override: Optional[str] = None) -> str:
+    if override:
+        return override.strip().rstrip("/")
     return get_settings().twitter_callback_url.rstrip("/")
 
 
-def build_authorization_url(state: str, code_verifier: str) -> str:
+def build_authorization_url(
+    state: str,
+    code_verifier: str,
+    redirect_uri: Optional[str] = None,
+) -> str:
     settings = get_settings()
     settings.require_oauth()
     client_id = settings.twitter_client_id.strip()
+    callback = resolve_redirect_uri(redirect_uri)
     params = {
         "response_type": "code",
         "client_id": client_id,
-        "redirect_uri": _redirect_uri(),
+        "redirect_uri": callback,
         "scope": " ".join(OAUTH_SCOPES),
         "state": state,
         "code_challenge": _code_challenge(code_verifier),
@@ -49,10 +56,10 @@ def build_authorization_url(state: str, code_verifier: str) -> str:
     return f"{X_AUTHORIZE_URL}?{urlencode(params)}"
 
 
-def start_oauth_flow() -> Tuple[str, str, str]:
+def start_oauth_flow(redirect_uri: Optional[str] = None) -> Tuple[str, str, str]:
     state = generate_oauth_state()
     code_verifier = generate_code_verifier()
-    auth_url = build_authorization_url(state, code_verifier)
+    auth_url = build_authorization_url(state, code_verifier, redirect_uri=redirect_uri)
     return auth_url, state, code_verifier
 
 
@@ -60,17 +67,19 @@ def exchange_code_for_token(
     code: str,
     code_verifier: str,
     state: Optional[str] = None,
+    redirect_uri: Optional[str] = None,
 ) -> Dict[str, Any]:
     settings = get_settings()
     settings.require_oauth()
     client_id = settings.twitter_client_id.strip()
     client_secret = settings.twitter_client_secret.strip()
+    callback = resolve_redirect_uri(redirect_uri)
     resp = requests.post(
         X_TOKEN_URL,
         data={
             "grant_type": "authorization_code",
             "code": code,
-            "redirect_uri": _redirect_uri(),
+            "redirect_uri": callback,
             "code_verifier": code_verifier,
             "client_id": client_id,
         },
