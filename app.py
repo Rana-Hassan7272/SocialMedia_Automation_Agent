@@ -194,27 +194,26 @@ def render_login():
             )
             get_db().save_oauth_pkce(oauth_state, code_verifier)
             st.session_state["x_auth_url"] = auth_url
+            st.rerun()
         except Exception as exc:
             st.error(friendly_error(exc))
 
     pending_auth = st.session_state.get("x_auth_url")
     if pending_auth:
-        st.markdown(
-            f'<p style="margin-top:1rem;">'
-            f'<a href="{pending_auth}" target="_self" rel="noopener noreferrer" '
-            f'style="display:inline-block;padding:0.6rem 1.2rem;background:#1DA1F2;'
-            f'color:white;text-decoration:none;border-radius:0.4rem;font-weight:600;">'
-            f"Continue to X authorization →</a></p>",
-            unsafe_allow_html=True,
+        st.link_button(
+            "Continue to X authorization (opens new tab)",
+            pending_auth,
+            type="primary",
         )
         st.caption(
-            "Click the blue button above (same tab). After approving on X, you return here logged in."
+            "Must open in a **new tab** — Streamlit cannot embed X login. "
+            "After you approve on X, you land back on SignalDraft logged in."
         )
-        st.info(
-            "If X shows an error, add this **exact** callback URL in X Developer Portal → "
-            "User authentication settings: "
-            f"`{callback_url}`"
-        )
+        with st.expander("Link not working? Copy URL manually"):
+            st.code(pending_auth, language=None)
+            st.write(
+                "Paste the URL above into a **new browser tab** (Chrome: Ctrl+L, paste, Enter)."
+            )
 
 
 def render_workflow_status(db: DatabaseManager, workflow_id: int, status_slot):
