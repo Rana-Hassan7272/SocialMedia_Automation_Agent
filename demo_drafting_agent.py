@@ -10,6 +10,7 @@ from src.agents.summarization_agent import SummarizationAgent
 from src.agents.drafting_agent import DraftingAgent
 from src.database import DatabaseManager
 from src.utils import RedditClient
+from src.utils.research_client import ResearchClient
 from src.workflow.state import create_initial_state
 
 print("✍️  Twitter/X Drafting Agent Demo\n")
@@ -19,7 +20,8 @@ print("=" * 60)
 db = DatabaseManager()
 reddit_client = RedditClient()
 intent_agent = IntentAgent(db_manager=db)
-research_agent = ResearchAgent(db_manager=db, reddit_client=reddit_client)
+research_client = ResearchClient(reddit_client=reddit_client)
+research_agent = ResearchAgent(db_manager=db, research_client=research_client)
 filtering_agent = FilteringAgent(db_manager=db, top_k=5)
 summarization_agent = SummarizationAgent(db_manager=db)
 drafting_agent = DraftingAgent(db_manager=db)

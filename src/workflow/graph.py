@@ -16,6 +16,7 @@ from ..agents.publishing_agent import PublishingAgent
 from ..database import DatabaseManager
 from ..database.models import WorkflowPhase, WorkflowStatus
 from ..utils import RedditClient, TwitterClient
+from ..utils.research_client import ResearchClient
 from ..utils.logging_config import get_logger
 
 logger = get_logger(__name__)
@@ -42,11 +43,15 @@ class WorkflowGraph:
     ):
         self.db_manager = db_manager
         self.reddit_client = reddit_client
+        self.research_client = ResearchClient(reddit_client=reddit_client)
         self.twitter_client = twitter_client
         self.checkpointer = MemorySaver()
 
         self.intent_agent = IntentAgent(db_manager=db_manager)
-        self.research_agent = ResearchAgent(db_manager=db_manager, reddit_client=reddit_client)
+        self.research_agent = ResearchAgent(
+            db_manager=db_manager,
+            research_client=self.research_client,
+        )
         self.filtering_agent = FilteringAgent(db_manager=db_manager, top_k=5)
         self.summarization_agent = SummarizationAgent(db_manager=db_manager)
         self.drafting_agent = DraftingAgent(db_manager=db_manager)

@@ -37,12 +37,12 @@ PHASE_LABELS = {
 }
 
 PRIVACY_TEXT = (
-    "SocialPulse stores your X OAuth tokens encrypted, workflow queries, drafts, "
+    "SignalDraft stores your X OAuth tokens encrypted, workflow queries, drafts, "
     "and audit events needed to run the service. We do not sell your data. "
     "Disconnect X anytime to remove stored tokens from this app."
 )
 TERMS_TEXT = (
-    "By using SocialPulse you confirm you own the connected X account, accept that "
+    "By using SignalDraft you confirm you own the connected X account, accept that "
     "AI-generated drafts may be inaccurate, and agree to review content before publishing. "
     "You are responsible for posts published from your account."
 )
@@ -378,13 +378,13 @@ def render_sidebar(db: DatabaseManager):
 
 
 def main():
-    st.set_page_config(page_title="SocialPulse", page_icon="🐦", layout="centered")
+    st.set_page_config(page_title="SignalDraft", page_icon="🐦", layout="centered")
     init_session()
     db = get_db()
     handle_oauth_callback(db)
 
-    st.title("SocialPulse")
-    st.caption("Reddit research → AI draft → publish to your X account")
+    st.title("SignalDraft")
+    st.caption("Hacker News + RSS research → AI draft → publish to your X account")
 
     if not st.session_state.user_id:
         render_login()

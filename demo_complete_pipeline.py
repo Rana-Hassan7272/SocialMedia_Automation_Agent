@@ -9,6 +9,7 @@ from src.agents import (
 )
 from src.database import DatabaseManager
 from src.utils import RedditClient, TwitterClient
+from src.utils.research_client import ResearchClient
 from src.workflow.state import create_initial_state
 
 print("🚀 COMPLETE SOCIAL MEDIA AUTOMATION PIPELINE\n")
@@ -20,7 +21,8 @@ reddit_client = RedditClient()
 twitter_client = TwitterClient.from_legacy_env()
 
 intent_agent = IntentAgent(db_manager=db)
-research_agent = ResearchAgent(db_manager=db, reddit_client=reddit_client)
+research_client = ResearchClient(reddit_client=reddit_client)
+research_agent = ResearchAgent(db_manager=db, research_client=research_client)
 filtering_agent = FilteringAgent(db_manager=db, top_k=5)
 summarization_agent = SummarizationAgent(db_manager=db)
 drafting_agent = DraftingAgent(db_manager=db)

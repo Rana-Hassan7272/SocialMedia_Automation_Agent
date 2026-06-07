@@ -7,6 +7,7 @@ from src.agents.intent_agent import IntentAgent
 from src.agents.research_agent import ResearchAgent
 from src.database import DatabaseManager
 from src.utils import RedditClient
+from src.utils.research_client import ResearchClient
 from src.workflow.state import create_initial_state
 
 print("🔬 Research Agent (ReAct + Reddit) Demo\n")
@@ -16,7 +17,8 @@ print("=" * 60)
 db = DatabaseManager()
 reddit_client = RedditClient()
 intent_agent = IntentAgent(db_manager=db)
-research_agent = ResearchAgent(db_manager=db, reddit_client=reddit_client)
+research_client = ResearchClient(reddit_client=reddit_client)
+research_agent = ResearchAgent(db_manager=db, research_client=research_client)
 
 # Test query
 query = "What's today special for christians?"

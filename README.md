@@ -1,175 +1,287 @@
-# 🤖 Social Media Automation System
+# SignalDraft
 
-An intelligent multi-agent system that researches topics from **Reddit** and automatically generates engaging **Twitter/X posts** with human oversight.
+**Multi-agent AI pipeline that researches live trends, drafts tweets, and publishes to X — only after human approval.**
 
-## 🌟 Features
+[![Python 3.12+](https://img.shields.io/badge/python-3.12+-blue.svg)](https://www.python.org/downloads/)
+[![LangGraph](https://img.shields.io/badge/orchestration-LangGraph-purple.svg)](https://github.com/langchain-ai/langgraph)
+[![Streamlit](https://img.shields.io/badge/UI-Streamlit-red.svg)](https://streamlit.io)
+[![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 
-- **Intent Understanding**: Automatically parses user queries to extract topic, scope, and tone
-- **Intelligent Research**: ReAct-style agent that searches **Reddit** for relevant content and discussions
-- **Content Filtering**: Removes low-quality content and ranks by engagement
-- **Insight Generation**: Summarizes Reddit posts into meaningful insights
-- **Twitter/X Post Creation**: Generates engaging, viral-worthy tweets
-- **Human-in-the-Loop**: Review and approve posts before publishing
-- **Publishing to Twitter/X**: Automatically posts to Twitter/X after approval
-- **Complete Logging**: SQLite database tracks entire workflow for analytics
-
-## 🏗️ Architecture
-
-This system uses **LangGraph** to orchestrate multiple specialized agents:
-
-1. **Intent Understanding Agent** - Parses user queries
-2. **Research Agent (ReAct)** - Searches Reddit intelligently  
-3. **Filtering Agent** - Cleans and ranks content
-4. **Summarization Agent** - Extracts key insights
-5. **Twitter/X Drafting Agent** - Creates engaging tweets
-6. **Publishing Agent** - Posts to Twitter/X (with approval)
-
-## 📋 Prerequisites
-
-- Python 3.10+
-- Groq API account (for LLM)
-- Twitter/X Developer account (for publishing only)
-- Internet connection (for Reddit API - no auth needed)
-
-## 🚀 Setup Instructions
-
-### 1. Clone and Navigate
-
-```bash
-cd social_media_automation
-```
-
-### 2. Create Virtual Environment
-
-```bash
-# Windows
-python -m venv venv
-venv\Scripts\activate
-
-# Linux/Mac
-python3 -m venv venv
-source venv/bin/activate
-```
-
-### 3. Install Dependencies
-
-```bash
-pip install -r requirements.txt
-```
-
-### 4. Configure Environment Variables
-
-Copy the example environment file:
-
-```bash
-cp .env.example .env
-```
-
-Edit `.env` and add your API keys:
-
-#### 🔑 Get Groq API Key
-1. Go to [https://console.groq.com/keys](https://console.groq.com/keys)
-2. Sign up or log in
-3. Click "Create API Key"
-4. Copy and paste into `.env` as `GROQ_API_KEY`
-
-#### 🔑 Get Twitter/X API Keys
-1. Go to [https://developer.twitter.com/en/portal/dashboard](https://developer.twitter.com/en/portal/dashboard)
-2. Sign in with your Twitter/X account
-3. Create a new Project and App
-4. Go to "Keys and Tokens" tab
-5. Generate:
-   - API Key and Secret
-   - Access Token and Secret
-6. Copy all 4 values to `.env`
-
-**Note**: You may need to apply for Elevated access for full API features.
-
-### 5. Initialize Database
-
-```bash
-python -c "from src.database import DatabaseManager; db = DatabaseManager(); db.initialize_database()"
-```
-
-You should see: `✅ Database initialized at: sqlite:///data/social_automation.db`
-
-## 📁 Project Structure
-
-```
-social_media_automation/
-├── src/
-│   ├── agents/              # Agent implementations
-│   ├── database/            # Database models and operations
-│   │   ├── models.py        # SQLAlchemy ORM models
-│   │   └── db_manager.py    # Database CRUD operations
-│   ├── config/              # Configuration management
-│   │   └── settings.py      # Environment variable handling
-│   ├── workflow/            # LangGraph workflow orchestration
-│   └── utils/               # Utility functions
-├── tests/                   # Test files
-├── data/                    # SQLite database storage
-├── .env                     # Your API keys (not in git)
-├── .env.example             # Template for environment variables
-├── requirements.txt         # Python dependencies
-└── README.md                # This file
-```
-
-## 🗄️ Database Schema
-
-The system uses SQLite with the following tables:
-
-- **workflows** - Track complete workflow executions
-- **intents** - Store parsed user intents
-- **research_results** - Store tweets from research
-- **filtered_content** - Store filtered and ranked tweets
-- **insights** - Store summarized insights
-- **drafts** - Store Twitter/X post drafts (with versions)
-- **feedback** - Store user feedback on drafts
-- **published_posts** - Store published tweets
-
-## 🎯 Usage
-
-(Usage instructions will be added as we build the agents and workflow)
-
-## 🧪 Testing
-
-Run tests with:
-
-```bash
-pytest tests/ -v
-```
-
-## 📝 Development Status
-
-- [x] Phase 1: Project Setup & Infrastructure
-- [ ] Phase 2: Core Agent Framework
-- [ ] Phase 3: Intent Understanding Agent
-- [ ] Phase 4: Research Agent (ReAct)
-- [ ] Phase 5: Content Processing Agents
-- [ ] Phase 6: Twitter/X Content Generation
-- [ ] Phase 7: Human-in-the-Loop System
-- [ ] Phase 8: Publishing & Integration (Twitter/X)
-- [ ] Phase 9: Logging & Analytics
-- [ ] Phase 10: Testing & Deployment
-
-## 🔧 Configuration
-
-Key settings in `.env`:
-
-- `GROQ_MODEL` - LLM model to use (default: llama-3.3-70b-versatile)
-- `MAX_TWEETS_PER_QUERY` - Max tweets to retrieve (default: 50)
-- `MIN_ENGAGEMENT_SCORE` - Minimum engagement for filtering (default: 10)
-- `TOP_TWEETS_COUNT` - Number of top tweets for summarization (default: 8)
-
-## 📄 License
-
-This project is for educational and personal use.
-
-## 🤝 Contributing
-
-This is a personal project, but suggestions and feedback are welcome!
+> Connect your X account → enter a topic → agents research Hacker News & RSS → Gemini drafts a tweet → you review → publish to **your** account.
 
 ---
 
-**Built with**: LangGraph, Groq, SQLAlchemy, Tweepy, and LinkedIn API
-# SocailMedia_Automation_System
+## What makes this project different
+
+Most “AI Twitter bots” are single-prompt scripts. **SignalDraft** is a **production-shaped** system:
+
+| Capability | Implementation |
+|------------|----------------|
+| Multi-agent orchestration | LangGraph state machine with 6 specialized agents |
+| Human-in-the-loop safety | Pipeline pauses before publish — nothing posts without approval |
+| Multi-user X login | OAuth 2.0 + PKCE per user; tokens encrypted at rest (Fernet) |
+| Resilient LLM layer | Google Gemini primary → Groq automatic fallback on rate limits |
+| Multi-source research | **Hacker News API + RSS feeds** (no keys); Reddit optional |
+| Production database | Neon PostgreSQL + Alembic migrations + audit log |
+| Rate limiting | Per-user daily caps on workflows, LLM calls, and publishes |
+| Deploy-ready | Streamlit Cloud + `.streamlit` config + secrets template |
+
+---
+
+## Architecture
+
+```mermaid
+flowchart TB
+    subgraph UI["Streamlit UI (app.py)"]
+        Login[X OAuth 2.0 Login]
+        Query[User Query]
+        Review[Draft Review]
+        Publish[Approve & Publish]
+    end
+
+    subgraph Orchestration["LangGraph Workflow"]
+        Intent[Intent Agent]
+        Research[Research Agent]
+        Filter[Filtering Agent]
+        Summarize[Summarization Agent]
+        Draft[Drafting Agent]
+        HITL{{Human Review}}
+        Pub[Publishing Agent]
+    end
+
+    subgraph Sources["Research Sources — no keys required"]
+        HN[Hacker News API]
+        RSS[RSS / Google News]
+        Reddit[(Reddit — optional)]
+    end
+
+    subgraph LLM["LLM Layer"]
+        Gemini[Google Gemini]
+        Groq[Groq Fallback]
+    end
+
+    subgraph Data["Neon PostgreSQL"]
+        Users[Users + OAuth Tokens]
+        Workflows[Workflows + Phases]
+        Audit[Audit Log]
+    end
+
+    Login --> Query --> Intent
+    Intent --> Research
+    Research --> HN & RSS & Reddit
+    Research --> Filter --> Summarize --> Draft --> HITL
+    HITL -->|approve| Pub
+    HITL -->|revise| Draft
+  Intent & Research & Filter & Summarize & Draft --> Gemini
+    Gemini -.->|429 / quota| Groq
+    Pub --> X[X / Twitter API]
+    Orchestration --> Data
+    UI --> Data
+```
+
+### Agent pipeline
+
+```
+User query
+    │
+    ▼
+┌─────────────┐   topic, scope, tone
+│ Intent      │   Understand what to research
+└──────┬──────┘
+       ▼
+┌─────────────┐   Hacker News + RSS (+ Reddit if configured)
+│ Research    │   ReAct-style strategy → multi-source fetch
+└──────┬──────┘
+       ▼
+┌─────────────┐   Top-K by relevance & engagement
+│ Filter      │
+└──────┬──────┘
+       ▼
+┌─────────────┐   Summary + key trends
+│ Summarize   │
+└──────┬──────┘
+       ▼
+┌─────────────┐   ≤280 char tweet draft
+│ Draft       │◄── revision loop
+└──────┬──────┘
+       ▼
+┌─────────────┐   PAUSE — Streamlit review UI
+│ Human Review│   Approve / Revise / Reject
+└──────┬──────┘
+       ▼
+┌─────────────┐   Post to user's X via OAuth token
+│ Publish     │
+└─────────────┘
+```
+
+---
+
+## Tech stack
+
+| Layer | Technology |
+|-------|------------|
+| Language | Python 3.12+ |
+| UI | Streamlit |
+| Agents | LangGraph + LangChain |
+| Primary LLM | Google Gemini (`gemini-3.1-flash-lite`) |
+| Fallback LLM | Groq (`llama-3.3-70b-versatile`) |
+| Database | SQLAlchemy 2.0, Alembic, Neon PostgreSQL |
+| Auth | X OAuth 2.0 PKCE, Fernet token encryption |
+| Research | Hacker News Firebase API, RSS/Atom (feedparser), PRAW optional |
+| Testing | pytest (27 tests) |
+
+---
+
+## Quick start
+
+### 1. Clone & install
+
+```bash
+git clone https://github.com/YOUR_USERNAME/social_media_automation.git
+cd social_media_automation
+python -m venv venv
+source venv/Scripts/activate   # Windows Git Bash
+pip install -r requirements.txt
+```
+
+### 2. Configure environment
+
+```bash
+cp .env.example .env
+python generate_encryption_key.py   # copy output to ENCRYPTION_KEY
+```
+
+**Required for full app:**
+
+| Variable | Purpose |
+|----------|---------|
+| `GOOGLE_API_KEY` | Primary LLM (Gemini) |
+| `GROQ_API_KEY` | Fallback LLM |
+| `DATABASE_URL` | Neon PostgreSQL connection string |
+| `TWITTER_CLIENT_ID` | X OAuth 2.0 Client ID |
+| `TWITTER_CLIENT_SECRET` | X OAuth 2.0 Client Secret |
+| `TWITTER_CALLBACK_URL` | `http://localhost:8501` locally |
+| `ENCRYPTION_KEY` | Fernet key for token storage |
+
+**Research works without Reddit keys** — Hacker News + RSS need no registration.
+
+### 3. Initialize & verify
+
+```bash
+python main.py migrate
+python main.py verify
+python -m pytest tests/ -v
+```
+
+### 4. Run
+
+```bash
+python main.py
+```
+
+Open **http://localhost:8501** → Connect with X → enter a topic → review draft → publish.
+
+---
+
+## Research sources
+
+| Source | Keys needed | Best for |
+|--------|-------------|----------|
+| **Hacker News API** | None | Tech, AI, startups |
+| **RSS feeds** | None | World news, business, technology |
+| Google News RSS | None | Query-specific headlines |
+| Reddit (PRAW) | Optional | Subreddit discussions — if you have legacy API access |
+
+> Reddit closed self-service app creation in 2026. SignalDraft defaults to **HN + RSS** so the pipeline works out of the box.
+
+---
+
+## X / Twitter setup
+
+1. [X Developer Portal](https://developer.twitter.com/) → create project & app
+2. Enable **OAuth 2.0** → type **Web App**
+3. Callback URL: `http://localhost:8501` (local) or `https://your-app.streamlit.app` (deploy)
+4. Permissions: **Read and write**
+5. Copy **OAuth 2.0 Client ID** and **Client Secret** (not OAuth 1.0 API keys)
+
+```bash
+python check_x_oauth.py
+python check_twitter_config.py
+```
+
+---
+
+## Deploy (Streamlit Cloud — free)
+
+1. Push repo to GitHub
+2. [share.streamlit.io](https://share.streamlit.io) → New app → `app.py`
+3. Add secrets from `.streamlit/secrets.toml.example`
+4. Set `TWITTER_CALLBACK_URL` to your Streamlit URL
+5. Update X portal callback to match
+6. Run `python main.py migrate` against Neon once
+
+```bash
+python main.py verify
+```
+
+---
+
+## Project structure
+
+```
+social_media_automation/
+├── app.py                      # Streamlit UI
+├── main.py                     # CLI entrypoint
+├── src/
+│   ├── agents/                 # Intent, Research, Filter, Summarize, Draft, Publish
+│   ├── auth/                   # OAuth 2.0 PKCE, encryption, token refresh
+│   ├── config/                 # Pydantic settings
+│   ├── database/               # SQLAlchemy models + db_manager
+│   ├── services/               # Background job runner
+│   ├── utils/                  # HN, RSS, Reddit, Twitter, LLM fallback
+│   └── workflow/               # LangGraph graph + state
+├── alembic/                    # Database migrations
+├── tests/                      # pytest suite
+└── .streamlit/                 # Cloud config + secrets template
+```
+
+---
+
+## CLI commands
+
+| Command | Description |
+|---------|-------------|
+| `python main.py` | Launch Streamlit app |
+| `python main.py verify` | Validate all services |
+| `python main.py migrate` | Run Alembic migrations |
+| `python main.py init-db` | Create tables (SQLite dev) |
+| `python demo_simulation.py` | Offline pipeline demo |
+| `python demo_complete_pipeline.py` | Full CLI with legacy X keys |
+
+---
+
+## Security & compliance
+
+- OAuth tokens encrypted with **Fernet** before database storage
+- PKCE verifiers stored server-side during OAuth handshake
+- **Audit log** for connect, disconnect, workflow, and publish events
+- Input sanitization on user queries and revision feedback
+- Per-user rate limits (configurable via `.env`)
+- Human approval required before any post goes live
+- Research uses official public APIs (HN, RSS); no scraping of paywalled content
+
+---
+
+## CV / portfolio pitch
+
+> Built **SignalDraft**, a production-grade multi-agent system using **LangGraph** that aggregates **Hacker News and RSS** research, generates social drafts with **Gemini/Groq**, and publishes to **X via OAuth 2.0** after human review — deployed on **Streamlit Cloud** with **Neon PostgreSQL**, encrypted tokens, Alembic migrations, and a full audit trail.
+
+---
+
+## License
+
+MIT — see [LICENSE](LICENSE) if present.
+
+---
+
+**Built with LangGraph · Gemini · Groq · Streamlit · Neon**

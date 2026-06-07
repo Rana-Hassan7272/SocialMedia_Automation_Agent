@@ -35,7 +35,7 @@ def run_migrate():
 
 
 def main():
-    parser = argparse.ArgumentParser(description="SocialPulse application entrypoint")
+    parser = argparse.ArgumentParser(description="SignalDraft application entrypoint")
     parser.add_argument(
         "command",
         nargs="?",

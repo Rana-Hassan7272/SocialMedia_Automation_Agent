@@ -86,32 +86,43 @@ def check_database(settings) -> bool:
         return False
 
 
-def check_reddit(settings) -> bool:
-    print("\n5. Reddit (research API)")
-    if settings.is_reddit_api_configured():
-        _ok("REDDIT_CLIENT_ID + REDDIT_CLIENT_SECRET (official API)")
-    else:
-        _warn("REDDIT_CLIENT_ID/SECRET missing — add free keys from reddit.com/prefs/apps if JSON fails")
+def check_research(settings) -> bool:
+    print("\n5. Research sources (Hacker News + RSS, Reddit optional)")
+    ok = False
     try:
-        from src.utils.reddit_client import RedditClient
-        client = RedditClient()
-        test_subs = ["news", "worldnews", "technology", "AskReddit"]
-        for sub in test_subs:
-            posts = client.get_top_posts(sub, limit=1, time_filter="day")
-            if posts:
-                _ok(f"Reddit reachable via r/{sub} ({len(posts)} sample post)")
-                return True
-        if settings.is_reddit_api_configured():
-            _fail(
-                "Reddit API",
-                "credentials set but no posts returned — check REDDIT_USER_AGENT and app type (script)",
-            )
-            return False
-        _warn("Reddit live test skipped — add REDDIT_CLIENT_ID/SECRET from reddit.com/prefs/apps for research")
-        return True
+        from src.utils.hn_client import HackerNewsClient
+        hn_posts = HackerNewsClient().search_posts("technology", limit=1)
+        if hn_posts:
+            _ok(f"Hacker News API ({len(hn_posts)} sample story)")
+            ok = True
+        else:
+            _fail("Hacker News", "no stories returned")
     except Exception as exc:
-        _fail("Reddit API", str(exc))
-        return False
+        _fail("Hacker News", str(exc))
+    try:
+        from src.utils.rss_client import RSSClient
+        rss_posts = RSSClient().search_posts("technology", limit=1)
+        if rss_posts:
+            _ok(f"RSS feeds ({len(rss_posts)} sample article)")
+            ok = True
+        else:
+            _warn("RSS returned no matching articles for test query")
+    except Exception as exc:
+        _fail("RSS", str(exc))
+        ok = False
+    if settings.is_reddit_api_configured():
+        try:
+            from src.utils.reddit_client import RedditClient
+            posts = RedditClient().get_top_posts("technology", limit=1, time_filter="day")
+            if posts:
+                _ok("Reddit API (optional)")
+            else:
+                _warn("Reddit credentials set but no data returned")
+        except Exception as exc:
+            _warn(f"Reddit optional: {exc}")
+    else:
+        _warn("Reddit keys not set — optional (new Reddit apps blocked for most users)")
+    return ok
 
 
 def check_legacy_twitter(settings) -> bool:
@@ -126,7 +137,7 @@ def check_legacy_twitter(settings) -> bool:
 def main() -> int:
     setup_logging()
     settings = get_settings()
-    print("SocialPulse setup verification")
+    print("SignalDraft setup verification")
     print("=" * 60)
 
     required = [
@@ -134,7 +145,7 @@ def main() -> int:
         check_groq_fallback(settings),
         check_llm(settings),
         check_database(settings),
-        check_reddit(settings),
+        check_research(settings),
     ]
     optional = [
         check_oauth(settings),

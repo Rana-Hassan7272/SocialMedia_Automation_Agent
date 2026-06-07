@@ -8,6 +8,7 @@ from src.agents.research_agent import ResearchAgent
 from src.agents.filtering_agent import FilteringAgent
 from src.database import DatabaseManager
 from src.utils import RedditClient
+from src.utils.research_client import ResearchClient
 from src.workflow.state import create_initial_state
 
 print("🔍 Filtering Agent Demo\n")
@@ -17,7 +18,8 @@ print("=" * 60)
 db = DatabaseManager()
 reddit_client = RedditClient()
 intent_agent = IntentAgent(db_manager=db)
-research_agent = ResearchAgent(db_manager=db, reddit_client=reddit_client)
+research_client = ResearchClient(reddit_client=reddit_client)
+research_agent = ResearchAgent(db_manager=db, research_client=research_client)
 filtering_agent = FilteringAgent(db_manager=db, top_k=5)
 
 # Test query
