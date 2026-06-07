@@ -123,8 +123,11 @@ class Settings(BaseSettings):
     @classmethod
     def normalize_callback_url(cls, v: Optional[str]) -> str:
         if not v:
-            return "http://localhost:8501"
-        return str(v).strip().rstrip("/")
+            return "http://localhost:8501/"
+        url = str(v).strip()
+        if not url.endswith("/"):
+            url = f"{url}/"
+        return url
 
     @field_validator("database_path")
     @classmethod

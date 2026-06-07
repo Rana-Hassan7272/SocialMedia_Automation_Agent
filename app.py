@@ -7,7 +7,6 @@ from src.auth.oauth import (
     fetch_x_user_profile,
     start_oauth_flow,
     token_expires_at,
-    unpack_oauth_state,
 )
 from src.config import get_settings
 from src.database import DatabaseManager
@@ -54,6 +53,7 @@ def init_session():
         "user_id": None,
         "x_username": None,
         "sd_session": None,
+        "legacy_x_mode": False,
         "thread_id": None,
         "active_workflow_id": None,
         "revision_feedback": "",
@@ -104,16 +104,25 @@ def _query_param(params, name: str):
 
 def _app_base_url() -> str:
     settings = get_settings()
-    configured = settings.twitter_callback_url.rstrip("/")
+    configured = settings.twitter_callback_url.strip()
+    if not configured.endswith("/"):
+        configured = f"{configured}/"
     try:
         headers = st.context.headers
         host = headers.get("X-Forwarded-Host") or headers.get("Host") or ""
         if host and "localhost" not in host:
             proto = headers.get("X-Forwarded-Proto", "https")
-            return f"{proto}://{host}".rstrip("/")
+            base = f"{proto}://{host}".rstrip("/")
+            return f"{base}/"
     except Exception:
         pass
     return configured
+
+
+def get_twitter_client_for_user(user_id: int, db: DatabaseManager) -> TwitterClient:
+    if st.session_state.get("legacy_x_mode"):
+        return TwitterClient.from_legacy_env()
+    return TwitterClient.from_user_id(user_id, db)
 
 
 def handle_oauth_callback(db: DatabaseManager) -> bool:
@@ -133,14 +142,14 @@ def handle_oauth_callback(db: DatabaseManager) -> bool:
             st.query_params.clear()
             return True
         st.session_state.pop("oauth_handled_code", None)
-    try:
-        pkce = unpack_oauth_state(state)
-    except ValueError as exc:
-        pkce = db.get_oauth_pkce(state)
-        if not pkce:
-            st.session_state["oauth_error"] = str(exc)
-            st.query_params.clear()
-            return True
+    pkce = db.get_oauth_pkce(state)
+    if not pkce:
+        st.session_state["oauth_error"] = (
+            "OAuth session not found in database. Click **Authorize SignalDraft on X** "
+            "again and complete within 15 minutes."
+        )
+        st.query_params.clear()
+        return True
     redirect_uri = pkce.get("redirect_uri") or _app_base_url()
     st.session_state["oauth_handled_code"] = code
     try:
@@ -201,6 +210,7 @@ def disconnect_x(db: DatabaseManager):
     st.session_state.user_id = None
     st.session_state.x_username = None
     st.session_state.sd_session = None
+    st.session_state.legacy_x_mode = False
     st.session_state.thread_id = None
     st.session_state.active_workflow_id = None
     st.query_params.clear()
@@ -243,7 +253,8 @@ def render_login():
 
     st.markdown("#### Step 2 — Authorize SignalDraft")
     try:
-        auth_url = start_oauth_flow(redirect_uri=callback_url)
+        auth_url, oauth_state, code_verifier = start_oauth_flow(redirect_uri=callback_url)
+        get_db().save_oauth_pkce(oauth_state, code_verifier, callback_url)
     except Exception as exc:
         st.error(str(exc))
         return
@@ -278,6 +289,32 @@ def render_login():
             """
         )
         st.code(auth_url, language=None)
+        st.warning(
+            "If X shows **400** in console: set Streamlit secret "
+            "`TWITTER_CALLBACK_URL=https://signaldraft.streamlit.app/` "
+            "(with trailing slash) and match it in X Developer Portal."
+        )
+
+    if settings.is_twitter_configured():
+        st.divider()
+        st.markdown("#### Alternative — your X account (legacy keys)")
+        st.caption(
+            "Skips OAuth 2.0. Add TWITTER_API_KEY, TWITTER_API_SECRET, "
+            "TWITTER_ACCESS_TOKEN, TWITTER_ACCESS_TOKEN_SECRET to Streamlit secrets."
+        )
+        if st.button("Continue with legacy X keys", type="secondary"):
+            try:
+                client = TwitterClient.from_legacy_env()
+                me = client.client.get_me(user_fields=["username"])
+                username = me.data.username if me.data else "legacy_user"
+                user = get_db().upsert_user(str(me.data.id), username)
+                st.session_state.user_id = user.id
+                st.session_state.x_username = username
+                st.session_state.legacy_x_mode = True
+                st.session_state.pop("oauth_error", None)
+                st.rerun()
+            except Exception as exc:
+                st.error(f"Legacy X login failed: {exc}")
 
 
 def render_workflow_status(db: DatabaseManager, workflow_id: int, status_slot):
@@ -346,7 +383,7 @@ def render_review(workflow_graph: WorkflowGraph, thread_id: str):
         if st.button("Approve & publish", type="primary"):
             try:
                 limiter.check_publish_limit(user_id)
-                twitter_client = TwitterClient.from_user_id(user_id, db)
+                twitter_client = get_twitter_client_for_user(user_id, db)
             except AppError as exc:
                 st.error(exc.user_message)
                 return

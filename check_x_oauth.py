@@ -1,4 +1,4 @@
-from src.auth.oauth import start_oauth_flow
+from src.auth.oauth import probe_authorize_url, start_oauth_flow
 from src.config import get_settings
 
 
@@ -8,41 +8,36 @@ def main():
     print("=" * 60)
 
     client_id = (settings.twitter_client_id or "").strip()
-    callback = settings.twitter_callback_url.rstrip("/")
+    callback = settings.twitter_callback_url.strip()
 
     print(f"\nCallback URL : {callback}")
-    print(f"Client ID    : {client_id[:8]}... ({len(client_id)} chars)" if client_id else "Client ID    : MISSING")
+    print(f"Client ID    : {client_id[:12]}... ({len(client_id)} chars)" if client_id else "Client ID    : MISSING")
 
     if not settings.is_oauth_configured():
-        print("\nFAIL: Set TWITTER_CLIENT_ID and TWITTER_CLIENT_SECRET in .env")
-        print("Use OAuth 2.0 Client ID from X portal (NOT the OAuth 1.0 API Key).")
-        return
-
-    if not settings.encryption_key:
-        print("\nFAIL: ENCRYPTION_KEY required for OAuth state signing")
+        print("\nFAIL: Set TWITTER_CLIENT_ID and TWITTER_CLIENT_SECRET")
         return
 
     if len(client_id) < 20:
-        print("\nWARN: Client ID looks too short.")
-        print("TWITTER_CLIENT_ID must be OAuth 2.0 Client ID, not OAuth 1.0 API Key.")
+        print("\nWARN: Use OAuth 2.0 Client ID from User authentication settings")
 
-    url = start_oauth_flow(redirect_uri=callback)
-
-    print("\nX Developer Portal must have:")
-    print("  - User authentication: OAuth 2.0 ON")
-    print("  - Type of App: Web App")
-    print("  - App permissions: Read and write")
-    print(f"  - Callback URL: {callback}")
-    print(f"  - Website URL: {callback}")
-
-    print("\nSample authorization URL (open in browser to test):")
-    print(url[:120] + "...")
-
-    print("\nIf X shows 400:")
-    print("  1. Callback URL in portal must match exactly (no trailing slash)")
-    print("  2. Use OAuth 2.0 Client ID + Secret (not API Key / Access Token)")
-    print("  3. Enable OAuth 2.0 under User authentication settings")
-    print("  4. Try incognito browser or log into x.com first")
+    try:
+        result = probe_authorize_url()
+        print(f"\nAuthorize probe HTTP status: {result['http_status']}")
+        print(f"Redirect URI sent: {result['redirect_uri']}")
+        if result["location"]:
+            print(f"Location header: {result['location'][:120]}...")
+        if result["http_status"] >= 400:
+            print("\nFAIL: X rejected authorize URL (400 = callback URL mismatch in portal)")
+            print("Fix: set TWITTER_CALLBACK_URL with trailing slash:")
+            print("  https://signaldraft.streamlit.app/")
+            print("Add the same URL in X Developer Portal callback list.")
+        else:
+            print("\nOK: Authorize URL accepted by X (open in browser to finish login)")
+            print(result["authorize_url"][:140] + "...")
+    except Exception as exc:
+        print(f"\nProbe failed: {exc}")
+        url, _, _ = start_oauth_flow()
+        print(url[:140] + "...")
 
 
 if __name__ == "__main__":
