@@ -1,75 +1,53 @@
-"""
-Twitter API Configuration Checker.
-Diagnoses Twitter API setup issues.
-"""
+from src.config import get_settings
 
-from src.config import settings
 
-print("🔍 Twitter API Configuration Checker\n")
-print("=" * 60)
+def main():
+    settings = get_settings()
+    print("X / Twitter configuration check\n")
+    print("=" * 60)
 
-# Check if Twitter is configured
-print("1. Checking if Twitter credentials are set...")
-try:
-    is_configured = settings.is_twitter_configured()
-    print(f"   ✅ Twitter configured: {is_configured}")
-except Exception as e:
-    print(f"   ❌ Error: {e}")
-
-# Check individual credentials
-print("\n2. Checking individual credentials...")
-
-credentials = {
-    "API Key (Consumer Key)": settings.twitter_api_key,
-    "API Secret (Consumer Secret)": settings.twitter_api_secret,
-    "Access Token": settings.twitter_access_token,
-    "Access Token Secret": settings.twitter_access_token_secret
-}
-
-for name, value in credentials.items():
-    if value and len(value) > 5:
-        masked = value[:5] + "..." + value[-5:]
-        print(f"   ✅ {name}: {masked}")
-    else:
-        print(f"   ❌ {name}: NOT SET or TOO SHORT")
-
-# Try to initialize Twitter client
-print("\n3. Testing Twitter client initialization...")
-try:
-    from src.utils import TwitterClient
-    client = TwitterClient()
-    print("   ✅ Twitter client initialized successfully")
-    
-    # Try to get authenticated user info
-    print("\n4. Testing API connection...")
-    try:
-        me = client.client.get_me()
-        if me.data:
-            print(f"   ✅ Connected as: @{me.data.username}")
+    print("\n1. OAuth 2.0 (Streamlit multi-user app)")
+    oauth_fields = {
+        "TWITTER_CLIENT_ID": settings.twitter_client_id,
+        "TWITTER_CLIENT_SECRET": settings.twitter_client_secret,
+        "TWITTER_CALLBACK_URL": settings.twitter_callback_url,
+        "ENCRYPTION_KEY": settings.encryption_key,
+    }
+    for name, value in oauth_fields.items():
+        if value and len(str(value)) > 3:
+            print(f"   OK  {name}")
         else:
-            print("   ⚠️  Connected but couldn't get user info")
-    except Exception as e:
-        print(f"   ❌ API test failed: {str(e)}")
-        if "403" in str(e):
-            print("\n   💡 403 Error means:")
-            print("      - Your app doesn't have 'Read and Write' permissions")
-            print("      - OR you need to regenerate Access Token after changing permissions")
-            print("\n   📋 Steps to fix:")
-            print("      1. Go to https://developer.twitter.com/en/portal/dashboard")
-            print("      2. Select your app")
-            print("      3. Go to 'App permissions'")
-            print("      4. Change to 'Read and Write'")
-            print("      5. Go to 'Keys and tokens'")
-            print("      6. REGENERATE Access Token & Secret")
-            print("      7. Update .env with NEW tokens")
-        
-except Exception as e:
-    print(f"   ❌ Failed to initialize: {str(e)}")
+            print(f"   MISSING  {name}")
 
-print("\n" + "=" * 60)
-print("\n📚 Required credentials in .env:")
-print("   TWITTER_API_KEY=your_consumer_key")
-print("   TWITTER_API_SECRET=your_consumer_secret")
-print("   TWITTER_ACCESS_TOKEN=your_access_token")
-print("   TWITTER_ACCESS_TOKEN_SECRET=your_access_token_secret")
-print("\n⚠️  All 4 are required for posting tweets!")
+    print(f"\n   OAuth ready: {settings.is_oauth_configured() and bool(settings.encryption_key)}")
+    if settings.twitter_client_id and len(settings.twitter_client_id.strip()) < 20:
+        print("   WARN: TWITTER_CLIENT_ID looks like OAuth 1.0 API Key.")
+        print("         Use OAuth 2.0 Client ID from X portal User authentication settings.")
+    print(f"   Callback: {settings.twitter_callback_url}")
+
+    print("\n2. Legacy single-account keys (CLI demos)")
+    legacy = {
+        "API Key": settings.twitter_api_key,
+        "API Secret": settings.twitter_api_secret,
+        "Access Token": settings.twitter_access_token,
+        "Access Token Secret": settings.twitter_access_token_secret,
+    }
+    for name, value in legacy.items():
+        if value and len(value) > 5:
+            print(f"   OK  {name}")
+        else:
+            print(f"   MISSING  {name}")
+
+    print(f"\n   Legacy ready: {settings.is_twitter_configured()}")
+
+    print("\n3. LLM")
+    print(f"   {'OK' if settings.is_google_configured() else 'MISSING'}  GOOGLE_API_KEY (primary, {settings.google_gemini_model})")
+    print(f"   {'OK' if settings.is_groq_configured() else 'MISSING'}  GROQ_API_KEY (fallback)")
+
+    print("\n" + "=" * 60)
+    print("\nStreamlit app:  streamlit run app.py")
+    print("Generate ENCRYPTION_KEY:  python generate_encryption_key.py")
+
+
+if __name__ == "__main__":
+    main()

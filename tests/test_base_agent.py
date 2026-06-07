@@ -59,13 +59,13 @@ def test_process_method():
     assert result["test_processed"] is True
 
 
-@patch('src.agents.base_agent.ChatGroq')
-def test_invoke_llm(mock_groq):
+@patch('src.agents.base_agent.FallbackChatModel')
+def test_invoke_llm(mock_llm):
     """Test LLM invocation."""
-    # Mock the LLM response
     mock_response = Mock()
     mock_response.content = "Test response"
-    mock_groq.return_value.invoke.return_value = mock_response
+    mock_llm.return_value.invoke.return_value = mock_response
+    mock_llm.return_value.model_label = "google:gemini-3.1-flash-lite"
     
     agent = TestAgent()
     response = agent.invoke_llm("Test message")

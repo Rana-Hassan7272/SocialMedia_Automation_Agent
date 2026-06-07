@@ -2,14 +2,23 @@
 langgraph>=0.2.0
 langchain>=0.3.0
 langchain-groq>=0.2.0
+langchain-google-genai>=2.0.0
+google-generativeai>=0.8.0
 groq>=0.11.0
 
 # Database
 sqlalchemy>=2.0.0
+alembic>=1.13.0
+psycopg[binary]>=3.1.0
 
 # API Clients
 tweepy>=4.14.0
-linkedin-api>=2.2.0
+
+# Web app
+streamlit>=1.32.0
+
+# Auth & security
+cryptography>=42.0.0
 
 # Configuration and Environment
 python-dotenv>=1.0.0
@@ -18,6 +27,7 @@ pydantic-settings>=2.0.0
 
 # Utilities
 requests>=2.31.0
+praw>=7.7.0
 python-dateutil>=2.8.2
 
 # Testing

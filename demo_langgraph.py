@@ -13,7 +13,7 @@ print("=" * 70)
 # Initialize components
 db = DatabaseManager()
 reddit_client = RedditClient()
-twitter_client = TwitterClient()
+twitter_client = TwitterClient.from_legacy_env()
 
 # Create workflow graph
 workflow_graph = WorkflowGraph(

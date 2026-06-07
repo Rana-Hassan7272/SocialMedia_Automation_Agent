@@ -1,9 +1,15 @@
 from .state import WorkflowState, WorkflowStep, create_initial_state
-from .graph import WorkflowGraph
 
 __all__ = [
     "WorkflowState",
     "WorkflowStep",
     "create_initial_state",
-    "WorkflowGraph"
+    "WorkflowGraph",
 ]
+
+
+def __getattr__(name: str):
+    if name == "WorkflowGraph":
+        from .graph import WorkflowGraph
+        return WorkflowGraph
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

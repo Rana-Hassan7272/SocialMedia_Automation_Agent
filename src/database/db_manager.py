@@ -4,18 +4,28 @@ Handles database initialization, connections, and CRUD operations.
 """
 
 from typing import Optional, List, Dict, Any
-from datetime import datetime
+from datetime import datetime, timedelta
 from contextlib import contextmanager
 from sqlalchemy import create_engine, select
 from sqlalchemy.orm import sessionmaker, Session
 from sqlalchemy.exc import SQLAlchemyError
 
 from .models import (
-    Base, Workflow, Intent, ResearchResult, FilteredContent,
-    Insight, Draft, Feedback, PublishedPost,
-    WorkflowStatus, DraftStatus, FeedbackType
+    Base, User, OAuthToken, OAuthPkceSession, Workflow, Intent, ResearchResult,
+    FilteredContent, Insight, Draft, Feedback, PublishedPost, AuditLog,
+    WorkflowStatus, WorkflowPhase, DraftStatus, FeedbackType, AuditAction,
 )
-from ..config import settings
+from ..config import get_settings
+from ..auth.encryption import decrypt_value, encrypt_value
+from ..utils.logging_config import get_logger
+
+logger = get_logger(__name__)
+
+
+def _safe_db_log_url(database_url: str) -> str:
+    if "@" in database_url:
+        return database_url.split("@", 1)[1]
+    return database_url
 
 
 class DatabaseManager:
@@ -28,26 +38,29 @@ class DatabaseManager:
         Args:
             database_url: SQLAlchemy database URL. If None, uses settings.
         """
+        settings = get_settings()
         self.database_url = database_url or settings.get_database_url()
-        self.engine = create_engine(
-            self.database_url,
-            echo=settings.log_level == "DEBUG"
-        )
+        engine_kwargs = {"echo": settings.log_level == "DEBUG"}
+        if self.database_url.startswith("postgresql"):
+            engine_kwargs["pool_pre_ping"] = True
+            engine_kwargs["pool_recycle"] = 300
+        self.engine = create_engine(self.database_url, **engine_kwargs)
         self.SessionLocal = sessionmaker(
             autocommit=False,
             autoflush=False,
-            bind=self.engine
+            expire_on_commit=False,
+            bind=self.engine,
         )
         
     def initialize_database(self):
         """Create all tables in the database."""
         Base.metadata.create_all(bind=self.engine)
-        print(f"✅ Database initialized at: {self.database_url}")
-    
+        logger.info("Database initialized at: %s", _safe_db_log_url(self.database_url))
+
     def drop_all_tables(self):
         """Drop all tables (use with caution!)."""
         Base.metadata.drop_all(bind=self.engine)
-        print("⚠️  All tables dropped")
+        logger.warning("All database tables dropped")
     
     @contextmanager
     def get_session(self):
@@ -71,12 +84,17 @@ class DatabaseManager:
     # Workflow Operations
     # ========================================
     
-    def create_workflow(self, user_query: str) -> Workflow:
+    def create_workflow(
+        self,
+        user_query: str,
+        user_id: Optional[int] = None,
+    ) -> Workflow:
         """
         Create a new workflow.
         
         Args:
             user_query: User's original query
+            user_id: Optional authenticated user ID
             
         Returns:
             Created Workflow object
@@ -84,7 +102,9 @@ class DatabaseManager:
         with self.get_session() as session:
             workflow = Workflow(
                 user_query=user_query,
-                status=WorkflowStatus.PENDING
+                user_id=user_id,
+                status=WorkflowStatus.PENDING,
+                phase=WorkflowPhase.PENDING,
             )
             session.add(workflow)
             session.flush()
@@ -96,7 +116,10 @@ class DatabaseManager:
     def get_workflow(self, workflow_id: int) -> Optional[Workflow]:
         """Get workflow by ID."""
         with self.get_session() as session:
-            return session.get(Workflow, workflow_id)
+            workflow = session.get(Workflow, workflow_id)
+            if workflow:
+                session.expunge(workflow)
+            return workflow
     
     def update_workflow_status(
         self,
@@ -118,6 +141,7 @@ class DatabaseManager:
             
             session.flush()
             session.refresh(workflow)
+            session.expunge(workflow)
             return workflow
     
     def get_all_workflows(self, limit: int = 100) -> List[Workflow]:
@@ -125,7 +149,211 @@ class DatabaseManager:
         with self.get_session() as session:
             stmt = select(Workflow).order_by(Workflow.created_at.desc()).limit(limit)
             return list(session.scalars(stmt).all())
-    
+
+    def count_user_workflows_today(self, user_id: int) -> int:
+        today_start = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
+        with self.get_session() as session:
+            stmt = select(Workflow).where(
+                Workflow.user_id == user_id,
+                Workflow.created_at >= today_start,
+            )
+            return len(list(session.scalars(stmt).all()))
+
+    # ========================================
+    # User & OAuth Operations
+    # ========================================
+
+    def save_oauth_pkce(self, state: str, code_verifier: str) -> None:
+        cutoff = datetime.utcnow() - timedelta(minutes=15)
+        with self.get_session() as session:
+            stale = select(OAuthPkceSession).where(OAuthPkceSession.created_at < cutoff)
+            for row in session.scalars(stale).all():
+                session.delete(row)
+            session.add(
+                OAuthPkceSession(
+                    state=state,
+                    code_verifier_encrypted=encrypt_value(code_verifier),
+                )
+            )
+
+    def consume_oauth_pkce(self, state: str) -> Optional[str]:
+        with self.get_session() as session:
+            row = session.get(OAuthPkceSession, state)
+            if not row:
+                return None
+            verifier = decrypt_value(row.code_verifier_encrypted)
+            session.delete(row)
+            return verifier
+
+    def upsert_user(self, x_user_id: str, x_username: str) -> User:
+        with self.get_session() as session:
+            stmt = select(User).where(User.x_user_id == x_user_id)
+            user = session.scalar(stmt)
+            if user:
+                user.x_username = x_username
+                user.last_login_at = datetime.utcnow()
+            else:
+                user = User(
+                    x_user_id=x_user_id,
+                    x_username=x_username,
+                    last_login_at=datetime.utcnow(),
+                )
+                session.add(user)
+            session.flush()
+            session.refresh(user)
+            session.expunge(user)
+            return user
+
+    def get_user(self, user_id: int) -> Optional[User]:
+        with self.get_session() as session:
+            user = session.get(User, user_id)
+            if user:
+                session.expunge(user)
+            return user
+
+    def save_oauth_token(
+        self,
+        user_id: int,
+        access_token: str,
+        refresh_token: Optional[str] = None,
+        expires_at: Optional[datetime] = None,
+    ) -> OAuthToken:
+        with self.get_session() as session:
+            stmt = select(OAuthToken).where(OAuthToken.user_id == user_id)
+            token_row = session.scalar(stmt)
+            if token_row:
+                token_row.access_token_encrypted = encrypt_value(access_token)
+                token_row.refresh_token_encrypted = (
+                    encrypt_value(refresh_token) if refresh_token else None
+                )
+                token_row.expires_at = expires_at
+                token_row.updated_at = datetime.utcnow()
+            else:
+                token_row = OAuthToken(
+                    user_id=user_id,
+                    access_token_encrypted=encrypt_value(access_token),
+                    refresh_token_encrypted=(
+                        encrypt_value(refresh_token) if refresh_token else None
+                    ),
+                    expires_at=expires_at,
+                )
+                session.add(token_row)
+            session.flush()
+            session.refresh(token_row)
+            session.expunge(token_row)
+            return token_row
+
+    def get_user_oauth_tokens(self, user_id: int) -> Optional[Dict[str, Any]]:
+        with self.get_session() as session:
+            user = session.get(User, user_id)
+            if not user or not user.oauth_token:
+                return None
+            token_row = user.oauth_token
+            result = {
+                "access_token": decrypt_value(token_row.access_token_encrypted),
+                "refresh_token": (
+                    decrypt_value(token_row.refresh_token_encrypted)
+                    if token_row.refresh_token_encrypted
+                    else None
+                ),
+                "expires_at": token_row.expires_at,
+                "x_username": user.x_username,
+                "x_user_id": user.x_user_id,
+            }
+            return result
+
+    def delete_user_oauth_token(self, user_id: int) -> None:
+        with self.get_session() as session:
+            stmt = select(OAuthToken).where(OAuthToken.user_id == user_id)
+            token_row = session.scalar(stmt)
+            if token_row:
+                session.delete(token_row)
+
+    def get_user_workflows(self, user_id: int, limit: int = 20) -> List[Workflow]:
+        with self.get_session() as session:
+            stmt = (
+                select(Workflow)
+                .where(Workflow.user_id == user_id)
+                .order_by(Workflow.created_at.desc())
+                .limit(limit)
+            )
+            workflows = list(session.scalars(stmt).all())
+            for workflow in workflows:
+                session.expunge(workflow)
+            return workflows
+
+    def update_workflow_phase(
+        self,
+        workflow_id: int,
+        phase: WorkflowPhase,
+        thread_id: Optional[str] = None,
+    ) -> None:
+        with self.get_session() as session:
+            workflow = session.get(Workflow, workflow_id)
+            if not workflow:
+                raise ValueError(f"Workflow {workflow_id} not found")
+            workflow.phase = phase
+            if thread_id:
+                workflow.thread_id = thread_id
+            if phase == WorkflowPhase.DRAFT_READY:
+                workflow.status = WorkflowStatus.DRAFT_READY
+            elif phase == WorkflowPhase.PUBLISHED:
+                workflow.status = WorkflowStatus.COMPLETED
+                workflow.completed_at = datetime.utcnow()
+            elif phase == WorkflowPhase.FAILED:
+                workflow.status = WorkflowStatus.FAILED
+            elif phase in {
+                WorkflowPhase.INTENT,
+                WorkflowPhase.RESEARCH,
+                WorkflowPhase.FILTER,
+                WorkflowPhase.SUMMARIZE,
+                WorkflowPhase.DRAFT,
+                WorkflowPhase.PUBLISHING,
+            }:
+                workflow.status = WorkflowStatus.IN_PROGRESS
+
+    def create_audit_log(
+        self,
+        action: AuditAction,
+        user_id: Optional[int] = None,
+        workflow_id: Optional[int] = None,
+        x_username: Optional[str] = None,
+        details: Optional[str] = None,
+    ) -> AuditLog:
+        with self.get_session() as session:
+            entry = AuditLog(
+                action=action,
+                user_id=user_id,
+                workflow_id=workflow_id,
+                x_username=x_username,
+                details=details,
+            )
+            session.add(entry)
+            session.flush()
+            session.refresh(entry)
+            session.expunge(entry)
+            logger.info(
+                "audit action=%s user_id=%s workflow_id=%s x_username=%s",
+                action.value,
+                user_id,
+                workflow_id,
+                x_username,
+            )
+            return entry
+
+    def get_user_audit_logs(self, user_id: int, limit: int = 20) -> List[AuditLog]:
+        with self.get_session() as session:
+            stmt = (
+                select(AuditLog)
+                .where(AuditLog.user_id == user_id)
+                .order_by(AuditLog.created_at.desc())
+                .limit(limit)
+            )
+            logs = list(session.scalars(stmt).all())
+            for entry in logs:
+                session.expunge(entry)
+            return logs
+
     # ========================================
     # Intent Operations
     # ========================================
@@ -150,6 +378,7 @@ class DatabaseManager:
             session.add(intent)
             session.flush()
             session.refresh(intent)
+            session.expunge(intent)
             return intent
     
     def get_intent_by_workflow(self, workflow_id: int) -> Optional[Intent]:
@@ -192,6 +421,7 @@ class DatabaseManager:
             session.add(result)
             session.flush()
             session.refresh(result)
+            session.expunge(result)
             return result
     
     def get_research_results_by_workflow(
@@ -227,6 +457,7 @@ class DatabaseManager:
             session.add(filtered)
             session.flush()
             session.refresh(filtered)
+            session.expunge(filtered)
             return filtered
     
     def get_filtered_content_by_workflow(
@@ -238,7 +469,10 @@ class DatabaseManager:
             stmt = select(FilteredContent).where(
                 FilteredContent.workflow_id == workflow_id
             ).order_by(FilteredContent.rank)
-            return list(session.scalars(stmt).all())
+            rows = list(session.scalars(stmt).all())
+            for row in rows:
+                session.expunge(row)
+            return rows
     
     # ========================================
     # Insight Operations
@@ -294,6 +528,7 @@ class DatabaseManager:
             session.add(draft)
             session.flush()
             session.refresh(draft)
+            session.expunge(draft)
             return draft
     
     def update_draft_status(
@@ -318,7 +553,10 @@ class DatabaseManager:
             stmt = select(Draft).where(
                 Draft.workflow_id == workflow_id
             ).order_by(Draft.version.desc())
-            return list(session.scalars(stmt).all())
+            drafts = list(session.scalars(stmt).all())
+            for draft in drafts:
+                session.expunge(draft)
+            return drafts
     
     def get_latest_draft(self, workflow_id: int) -> Optional[Draft]:
         """Get the latest draft for a workflow."""
@@ -345,6 +583,7 @@ class DatabaseManager:
             session.add(feedback)
             session.flush()
             session.refresh(feedback)
+            session.expunge(feedback)
             return feedback
     
     def get_feedback_by_draft(self, draft_id: int) -> List[Feedback]:

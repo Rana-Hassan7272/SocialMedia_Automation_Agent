@@ -1,4 +1,3 @@
-from .db_manager import DatabaseManager
 from .models import (
     Workflow,
     Intent,
@@ -7,7 +6,7 @@ from .models import (
     Insight,
     Draft,
     Feedback,
-    PublishedPost
+    PublishedPost,
 )
 
 __all__ = [
@@ -19,5 +18,12 @@ __all__ = [
     "Insight",
     "Draft",
     "Feedback",
-    "PublishedPost"
+    "PublishedPost",
 ]
+
+
+def __getattr__(name: str):
+    if name == "DatabaseManager":
+        from .db_manager import DatabaseManager
+        return DatabaseManager
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

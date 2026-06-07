@@ -17,7 +17,7 @@ print("=" * 70)
 # Initialize all components
 db = DatabaseManager()
 reddit_client = RedditClient()
-twitter_client = TwitterClient()
+twitter_client = TwitterClient.from_legacy_env()
 
 intent_agent = IntentAgent(db_manager=db)
 research_agent = ResearchAgent(db_manager=db, reddit_client=reddit_client)
