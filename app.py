@@ -53,6 +53,7 @@ def init_session():
     defaults = {
         "user_id": None,
         "x_username": None,
+        "sd_session": None,
         "thread_id": None,
         "active_workflow_id": None,
         "revision_feedback": "",
@@ -62,7 +63,20 @@ def init_session():
             st.session_state[key] = value
 
 
-DB_CACHE_VERSION = "oauth-v3"
+def restore_user_session(db: DatabaseManager):
+    if st.session_state.get("user_id"):
+        return
+    token = st.session_state.get("sd_session") or _query_param(st.query_params, "sd_session")
+    if not token:
+        return
+    user = db.get_app_session(token)
+    if user:
+        st.session_state.user_id = user.id
+        st.session_state.x_username = user.x_username
+        st.session_state.sd_session = token
+
+
+DB_CACHE_VERSION = "oauth-v4"
 
 
 @st.cache_resource
@@ -152,14 +166,17 @@ def handle_oauth_callback(db: DatabaseManager) -> bool:
                 x_username=user.x_username,
             )
             db.delete_oauth_pkce(state)
+        session_token = db.create_app_session(user.id)
         st.session_state.user_id = user.id
         st.session_state.x_username = user.x_username
+        st.session_state.sd_session = session_token
         st.session_state.pop("x_auth_url", None)
         st.session_state.pop("oauth_error", None)
         st.session_state.pop("oauth_handled_code", None)
         st.session_state["oauth_success"] = user.x_username
         st.query_params.clear()
-        st.rerun()
+        st.query_params["sd_session"] = session_token
+        return True
     except Exception as exc:
         logger.exception("OAuth callback failed")
         st.session_state.pop("oauth_handled_code", None)
@@ -171,6 +188,9 @@ def handle_oauth_callback(db: DatabaseManager) -> bool:
 def disconnect_x(db: DatabaseManager):
     user_id = st.session_state.user_id
     username = st.session_state.x_username
+    session_token = st.session_state.get("sd_session")
+    if session_token:
+        db.delete_app_session(session_token)
     if user_id:
         db.delete_user_oauth_token(user_id)
         db.create_audit_log(
@@ -180,8 +200,10 @@ def disconnect_x(db: DatabaseManager):
         )
     st.session_state.user_id = None
     st.session_state.x_username = None
+    st.session_state.sd_session = None
     st.session_state.thread_id = None
     st.session_state.active_workflow_id = None
+    st.query_params.clear()
     st.rerun()
 
 
@@ -206,6 +228,7 @@ def render_login():
                 "oauth_handled_code",
                 "user_id",
                 "x_username",
+                "sd_session",
             ):
                 st.session_state.pop(key, None)
             st.query_params.clear()
@@ -469,7 +492,9 @@ def main():
     st.set_page_config(page_title="SignalDraft", page_icon="🐦", layout="centered")
     init_session()
     db = get_db()
-    callback_active = handle_oauth_callback(db)
+    restore_user_session(db)
+    handle_oauth_callback(db)
+    restore_user_session(db)
 
     st.title("SignalDraft")
     st.caption("Hacker News + RSS research → AI draft → publish to your X account")
@@ -477,9 +502,6 @@ def main():
     oauth_success = st.session_state.pop("oauth_success", None)
     if oauth_success:
         st.success(f"Connected as **@{oauth_success}**. You can create posts below.")
-
-    if callback_active and not st.session_state.user_id:
-        return
 
     if not st.session_state.user_id:
         render_login()

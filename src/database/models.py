@@ -92,6 +92,20 @@ class User(Base):
     )
 
 
+class AppSession(Base):
+    """Browser session token for Streamlit login persistence."""
+    __tablename__ = "app_sessions"
+
+    token: Mapped[str] = mapped_column(String(128), primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime,
+        default=datetime.utcnow,
+        nullable=False,
+    )
+    expires_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+
+
 class OAuthPkceSession(Base):
     """Temporary PKCE verifier storage for X OAuth callback."""
     __tablename__ = "oauth_pkce_sessions"

@@ -12,7 +12,7 @@ from sqlalchemy.orm import sessionmaker, Session
 from sqlalchemy.exc import SQLAlchemyError
 
 from .models import (
-    Base, User, OAuthToken, OAuthPkceSession, Workflow, Intent, ResearchResult,
+    Base, User, OAuthToken, AppSession, OAuthPkceSession, Workflow, Intent, ResearchResult,
     FilteredContent, Insight, Draft, Feedback, PublishedPost, AuditLog,
     WorkflowStatus, WorkflowPhase, DraftStatus, FeedbackType, AuditAction,
 )
@@ -203,6 +203,30 @@ class DatabaseManager:
     def delete_oauth_pkce(self, state: str) -> None:
         with self.get_session() as session:
             row = session.get(OAuthPkceSession, state)
+            if row:
+                session.delete(row)
+
+    def create_app_session(self, user_id: int, days: int = 30) -> str:
+        import secrets
+        token = secrets.token_urlsafe(32)
+        expires = datetime.utcnow() + timedelta(days=days)
+        with self.get_session() as session:
+            session.add(AppSession(token=token, user_id=user_id, expires_at=expires))
+        return token
+
+    def get_app_session(self, token: str) -> Optional[User]:
+        with self.get_session() as session:
+            row = session.get(AppSession, token)
+            if not row or row.expires_at < datetime.utcnow():
+                return None
+            user = session.get(User, row.user_id)
+            if user:
+                session.expunge(user)
+            return user
+
+    def delete_app_session(self, token: str) -> None:
+        with self.get_session() as session:
+            row = session.get(AppSession, token)
             if row:
                 session.delete(row)
 
