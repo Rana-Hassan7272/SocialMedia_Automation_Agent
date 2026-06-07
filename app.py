@@ -188,9 +188,6 @@ def disconnect_x(db: DatabaseManager):
 def render_login():
     settings = get_settings()
     st.subheader("Connect your X account")
-    st.write(
-        "Sign in with X to authorize this app. Posts are published only to **your** account after you approve a draft."
-    )
     if not settings.is_oauth_configured():
         st.error("Server missing TWITTER_CLIENT_ID and TWITTER_CLIENT_SECRET.")
         return
@@ -199,14 +196,6 @@ def render_login():
         return
 
     callback_url = _app_base_url()
-    configured = settings.twitter_callback_url.rstrip("/")
-    if callback_url != configured:
-        st.warning(
-            f"Detected app URL `{callback_url}` differs from TWITTER_CALLBACK_URL "
-            f"`{configured}`. OAuth will use the detected URL."
-        )
-    st.caption(f"OAuth callback URL: `{callback_url}`")
-
     oauth_error = st.session_state.get("oauth_error")
     if oauth_error:
         st.error(oauth_error)
@@ -222,34 +211,50 @@ def render_login():
             st.query_params.clear()
             st.rerun()
 
-    if st.button("Connect with X", type="primary"):
-        try:
-            st.session_state.pop("oauth_handled_code", None)
-            st.session_state.pop("oauth_error", None)
-            st.session_state.pop("oauth_success", None)
-            auth_url = start_oauth_flow(redirect_uri=callback_url)
-            st.session_state["x_auth_url"] = auth_url
-            st.rerun()
-        except Exception as exc:
-            st.error(str(exc))
+    st.markdown("#### Step 1 — Log into X first")
+    st.link_button("Open x.com and log in", "https://x.com", type="secondary")
+    st.caption(
+        "Use your **X email/username + password** on x.com. "
+        "Do **not** use “Sign in with Google” — that causes FedCM console errors."
+    )
 
-    pending_auth = st.session_state.get("x_auth_url")
-    if pending_auth:
-        st.link_button(
-            "Continue to X authorization (opens new tab)",
-            pending_auth,
-            type="primary",
+    st.markdown("#### Step 2 — Authorize SignalDraft")
+    try:
+        auth_url = start_oauth_flow(redirect_uri=callback_url)
+    except Exception as exc:
+        st.error(str(exc))
+        return
+
+    st.markdown(
+        f'<a href="{auth_url}" target="_blank" rel="noopener noreferrer" '
+        f'style="display:inline-block;padding:0.65rem 1.25rem;background:#1DA1F2;'
+        f'color:white;text-decoration:none;border-radius:0.45rem;font-weight:600;">'
+        f"Authorize SignalDraft on X (new tab) →</a>",
+        unsafe_allow_html=True,
+    )
+
+    st.markdown("#### Step 3 — Finish on the redirect tab")
+    st.info(
+        "On X click **Authorize app** (not only log in). "
+        "X sends you back to SignalDraft in **that same tab** with "
+        "**Completing X login…** then **Connected as @you**.\n\n"
+        "**Ignore browser console errors** like FedCM / GSI_LOGGER — those are from "
+        "X’s Google sign-in button, not SignalDraft."
+    )
+
+    with st.expander("Still stuck? Troubleshooting"):
+        st.markdown(
+            f"""
+1. Log into [x.com](https://x.com) with **email/password** (not Google).
+2. Click **Authorize SignalDraft on X** above — opens a **new tab**.
+3. On the X page, if asked to log in again, use **username/password** on that page.
+4. Click **Authorize** / **Allow** for SignalDraft.
+5. Stay in the tab X redirects to (`{callback_url}`) — do not switch tabs.
+6. Try **Chrome Incognito** or **Firefox** if Chrome blocks sign-in.
+7. Callback URL in X Developer Portal must be exactly: `{callback_url}`
+            """
         )
-        st.warning(
-            "**Important:** After you approve on X, stay in the tab X redirects you to. "
-            "Do not go back to this tab — login completes only in the redirect tab."
-        )
-        st.caption(
-            "On X you must click **Authorize app** (not just log in). "
-            "Then you return here logged in as @your_username."
-        )
-        with st.expander("Link not working? Copy URL manually"):
-            st.code(pending_auth, language=None)
+        st.code(auth_url, language=None)
 
 
 def render_workflow_status(db: DatabaseManager, workflow_id: int, status_slot):
