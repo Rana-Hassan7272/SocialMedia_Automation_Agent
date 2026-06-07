@@ -156,7 +156,7 @@ def handle_oauth_callback(db: DatabaseManager):
     except Exception as exc:
         logger.exception("OAuth callback failed")
         st.session_state.pop("oauth_handled_code", None)
-        st.session_state["oauth_error"] = f"X login failed: {friendly_error(exc)}"
+        st.session_state["oauth_error"] = f"X login failed: {exc}"
         st.query_params.clear()
 
 
@@ -199,9 +199,20 @@ def render_login():
         )
     st.caption(f"OAuth callback URL: `{callback_url}`")
 
-    oauth_error = st.session_state.pop("oauth_error", None)
+    oauth_error = st.session_state.get("oauth_error")
     if oauth_error:
         st.error(oauth_error)
+        if st.button("Clear error and start over", type="secondary"):
+            for key in (
+                "oauth_error",
+                "x_auth_url",
+                "oauth_handled_code",
+                "user_id",
+                "x_username",
+            ):
+                st.session_state.pop(key, None)
+            st.query_params.clear()
+            st.rerun()
 
     if st.button("Connect with X", type="primary"):
         try:
