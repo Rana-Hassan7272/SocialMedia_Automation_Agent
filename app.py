@@ -77,7 +77,7 @@ def restore_user_session(db: DatabaseManager):
         st.session_state.sd_session = token
 
 
-DB_CACHE_VERSION = "oauth-v6"
+DB_CACHE_VERSION = "oauth-v7"
 
 
 @st.cache_resource
@@ -161,7 +161,10 @@ def handle_oauth_callback(db: DatabaseManager) -> bool:
                 redirect_uri=redirect_uri,
             )
             access_token = token_data["access_token"]
-            profile = fetch_x_user_profile(access_token)
+            profile = fetch_x_user_profile(
+                access_token,
+                id_token=token_data.get("id_token"),
+            )
             user = db.upsert_user(profile["x_user_id"], profile["x_username"])
             db.save_oauth_token(
                 user_id=user.id,

@@ -5,15 +5,16 @@ import json
 import secrets
 import time
 from datetime import datetime, timedelta, timezone
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 from urllib.parse import urlencode
 
 import requests
+import tweepy
 from requests.auth import HTTPBasicAuth
 
 from ..config import get_settings
 
-OAUTH_SCOPES = ["tweet.read", "tweet.write", "users.read", "offline.access"]
+OAUTH_SCOPES = ["tweet.read", "tweet.write", "users.read", "offline.access", "openid"]
 X_AUTHORIZE_URL = "https://x.com/i/oauth2/authorize"
 X_TOKEN_URL = "https://api.twitter.com/2/oauth2/token"
 OAUTH_STATE_TTL_SECONDS = 900
@@ -139,22 +140,119 @@ def exchange_code_for_token(
     raise ValueError("X token exchange failed")
 
 
-def fetch_x_user_profile(access_token: str) -> Dict[str, str]:
-    resp = requests.get(
-        "https://api.twitter.com/2/users/me",
-        headers={"Authorization": f"Bearer {access_token}"},
-        params={"user.fields": "username"},
-        timeout=30,
+def _profile_from_id_token(id_token: str) -> Dict[str, str]:
+    parts = id_token.split(".")
+    if len(parts) != 3:
+        raise ValueError("Invalid id_token")
+    payload = parts[1]
+    padded = payload + "=" * (-len(payload) % 4)
+    data = json.loads(base64.urlsafe_b64decode(padded.encode("ascii")))
+    user_id = data.get("sub")
+    if not user_id:
+        raise ValueError("id_token missing sub")
+    username = (
+        data.get("preferred_username")
+        or data.get("username")
+        or data.get("screen_name")
     )
-    if resp.status_code != 200:
-        raise ValueError(f"Could not fetch X profile ({resp.status_code}): {resp.text}")
-    data = resp.json().get("data")
-    if not data:
+    if not username:
+        profile_url = data.get("profile") or ""
+        if "x.com/" in profile_url:
+            username = profile_url.rstrip("/").split("/")[-1]
+    return {
+        "x_user_id": str(user_id),
+        "x_username": username or f"user_{user_id}",
+    }
+
+
+def _profile_from_bearer(access_token: str) -> Dict[str, str]:
+    last_error = None
+    for host in ("https://api.twitter.com", "https://api.x.com"):
+        resp = requests.get(
+            f"{host}/2/users/me",
+            headers={"Authorization": f"Bearer {access_token}"},
+            params={"user.fields": "username"},
+            timeout=30,
+        )
+        if resp.status_code == 200:
+            data = resp.json().get("data")
+            if data:
+                return {
+                    "x_user_id": str(data["id"]),
+                    "x_username": data["username"],
+                }
+        last_error = ValueError(
+            f"Could not fetch X profile ({resp.status_code}): {resp.text}"
+        )
+    if last_error:
+        raise last_error
+    raise ValueError("Could not fetch X user profile")
+
+
+def _profile_from_tweepy(access_token: str) -> Dict[str, str]:
+    settings = get_settings()
+    settings.require_oauth()
+    client = tweepy.Client(
+        bearer_token=access_token,
+        consumer_key=settings.twitter_client_id.strip(),
+        consumer_secret=settings.twitter_client_secret.strip(),
+        wait_on_rate_limit=True,
+    )
+    me = client.get_me(user_fields=["username"], user_auth=False)
+    if not me.data:
         raise ValueError("Could not fetch X user profile")
     return {
-        "x_user_id": str(data["id"]),
-        "x_username": data["username"],
+        "x_user_id": str(me.data.id),
+        "x_username": me.data.username,
     }
+
+
+def _profile_from_legacy_keys() -> Optional[Dict[str, str]]:
+    settings = get_settings()
+    if not settings.is_twitter_configured():
+        return None
+    client = tweepy.Client(
+        consumer_key=settings.twitter_api_key,
+        consumer_secret=settings.twitter_api_secret,
+        access_token=settings.twitter_access_token,
+        access_token_secret=settings.twitter_access_token_secret,
+        wait_on_rate_limit=True,
+    )
+    me = client.get_me(user_fields=["username"], user_auth=True)
+    if not me.data:
+        return None
+    return {
+        "x_user_id": str(me.data.id),
+        "x_username": me.data.username,
+    }
+
+
+def fetch_x_user_profile(
+    access_token: str,
+    id_token: Optional[str] = None,
+) -> Dict[str, str]:
+    attempts: List[str] = []
+    if id_token:
+        try:
+            return _profile_from_id_token(id_token)
+        except ValueError as exc:
+            attempts.append(f"id_token: {exc}")
+
+    for fetcher, label in (
+        (_profile_from_bearer, "users/me"),
+        (_profile_from_tweepy, "tweepy"),
+    ):
+        try:
+            return fetcher(access_token)
+        except Exception as exc:
+            attempts.append(f"{label}: {exc}")
+
+    legacy = _profile_from_legacy_keys()
+    if legacy:
+        return legacy
+
+    detail = "; ".join(attempts) if attempts else "no profile source available"
+    raise ValueError(f"Could not resolve X profile ({detail})")
 
 
 def probe_authorize_url(redirect_uri: Optional[str] = None) -> Dict[str, Any]:
