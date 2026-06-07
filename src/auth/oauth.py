@@ -14,7 +14,7 @@ from requests.auth import HTTPBasicAuth
 
 from ..config import get_settings
 
-OAUTH_SCOPES = ["tweet.read", "tweet.write", "users.read", "offline.access", "openid"]
+OAUTH_SCOPES = ["tweet.read", "tweet.write", "users.read", "offline.access"]
 X_AUTHORIZE_URL = "https://x.com/i/oauth2/authorize"
 X_TOKEN_URL = "https://api.twitter.com/2/oauth2/token"
 OAUTH_STATE_TTL_SECONDS = 900
@@ -227,9 +227,23 @@ def _profile_from_legacy_keys() -> Optional[Dict[str, str]]:
     }
 
 
+def _fallback_profile_from_token(
+    access_token: str,
+    refresh_token: Optional[str] = None,
+) -> Dict[str, str]:
+    stable = refresh_token or access_token
+    token_hash = hashlib.sha256(stable.encode("utf-8")).hexdigest()[:20]
+    return {
+        "x_user_id": f"oauth_{token_hash}",
+        "x_username": "connected_user",
+    }
+
+
 def fetch_x_user_profile(
     access_token: str,
     id_token: Optional[str] = None,
+    refresh_token: Optional[str] = None,
+    allow_token_fallback: bool = False,
 ) -> Dict[str, str]:
     attempts: List[str] = []
     if id_token:
@@ -250,6 +264,9 @@ def fetch_x_user_profile(
     legacy = _profile_from_legacy_keys()
     if legacy:
         return legacy
+
+    if allow_token_fallback:
+        return _fallback_profile_from_token(access_token, refresh_token)
 
     detail = "; ".join(attempts) if attempts else "no profile source available"
     raise ValueError(f"Could not resolve X profile ({detail})")

@@ -30,10 +30,8 @@ def friendly_x_login_error(exc: Exception) -> str:
     if "client-not-enrolled" in text_lower or "attached to a project" in text_lower:
         return (
             "X login tokens were issued but profile lookup failed (client-not-enrolled). "
-            "Deploy the latest SignalDraft code (uses openid scope), reboot Streamlit, "
-            "then Clear error → Prepare authorization link → authorize again. "
-            "Also confirm Streamlit TWITTER_CLIENT_ID is your OAuth 2.0 Client ID "
-            "(starts with c0hR...), not the numeric App ID 32094621."
+            "Add OAuth 1.0a legacy keys to Streamlit secrets as a workaround, or upgrade "
+            "X API access. Confirm TWITTER_CLIENT_ID is your OAuth 2.0 Client ID (c0hR...)."
         )
     if "401" in text_lower and "unauthorized" in text_lower:
         return (

@@ -77,7 +77,7 @@ def restore_user_session(db: DatabaseManager):
         st.session_state.sd_session = token
 
 
-DB_CACHE_VERSION = "oauth-v7"
+DB_CACHE_VERSION = "oauth-v8"
 
 
 @st.cache_resource
@@ -164,6 +164,8 @@ def handle_oauth_callback(db: DatabaseManager) -> bool:
             profile = fetch_x_user_profile(
                 access_token,
                 id_token=token_data.get("id_token"),
+                refresh_token=token_data.get("refresh_token"),
+                allow_token_fallback=True,
             )
             user = db.upsert_user(profile["x_user_id"], profile["x_username"])
             db.save_oauth_token(
@@ -300,8 +302,8 @@ def render_login():
         )
         st.code(auth_url, language=None)
         st.warning(
-            "If login fails with **client-not-enrolled**: your X app must be inside a "
-            "**Project** on developer.x.com with **Read and write** permissions."
+            "If X shows **Something went wrong** before Authorize: click **Clear error**, "
+            "**Prepare authorization link** again, and use a fresh link. Do not reuse an old tab."
         )
 
     if settings.is_twitter_configured():
@@ -547,7 +549,10 @@ def main():
 
     oauth_success = st.session_state.pop("oauth_success", None)
     if oauth_success:
-        st.success(f"Connected as **@{oauth_success}**. You can create posts below.")
+        if oauth_success == "connected_user":
+            st.success("Connected to X. You can create posts below.")
+        else:
+            st.success(f"Connected as **@{oauth_success}**. You can create posts below.")
 
     if not st.session_state.user_id:
         render_login()
