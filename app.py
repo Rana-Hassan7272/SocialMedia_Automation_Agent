@@ -103,48 +103,60 @@ def handle_oauth_callback(db: DatabaseManager):
     oauth_error = _query_param(params, "error")
     if oauth_error:
         detail = _query_param(params, "error_description") or oauth_error
-        st.error(f"X authorization failed: {detail}")
-        st.caption(
-            f"Confirm this callback URL is in your X Developer Portal: `{_app_base_url()}`"
-        )
+        st.session_state["oauth_error"] = f"X authorization failed: {detail}"
         st.query_params.clear()
         return
     code = _query_param(params, "code")
     state = _query_param(params, "state")
     if not code or not state:
         return
-    redirect_uri = _app_base_url()
+    if st.session_state.get("oauth_handled_code") == code:
+        return
+    st.session_state["oauth_handled_code"] = code
+    pkce = db.get_oauth_pkce(state)
+    if not pkce:
+        st.session_state.pop("oauth_handled_code", None)
+        st.session_state["oauth_error"] = (
+            "OAuth session not found. Click **Connect with X** again, then authorize "
+            "in the new tab without waiting more than 15 minutes."
+        )
+        st.query_params.clear()
+        return
+    redirect_uri = pkce.get("redirect_uri") or _app_base_url()
     try:
-        verifier = db.consume_oauth_pkce(state)
-        if not verifier:
-            st.error("OAuth session expired or invalid. Click Connect with X again.")
-            st.query_params.clear()
-            return
-        token_data = exchange_code_for_token(
-            code, verifier, state=state, redirect_uri=redirect_uri
-        )
-        access_token = token_data["access_token"]
-        profile = fetch_x_user_profile(access_token)
-        user = db.upsert_user(profile["x_user_id"], profile["x_username"])
-        db.save_oauth_token(
-            user_id=user.id,
-            access_token=access_token,
-            refresh_token=token_data.get("refresh_token"),
-            expires_at=token_expires_at(token_data.get("expires_in")),
-        )
-        db.create_audit_log(
-            AuditAction.CONNECT_X,
-            user_id=user.id,
-            x_username=user.x_username,
-        )
+        with st.spinner("Completing X login..."):
+            token_data = exchange_code_for_token(
+                code,
+                pkce["code_verifier"],
+                state=state,
+                redirect_uri=redirect_uri,
+            )
+            access_token = token_data["access_token"]
+            profile = fetch_x_user_profile(access_token)
+            user = db.upsert_user(profile["x_user_id"], profile["x_username"])
+            db.save_oauth_token(
+                user_id=user.id,
+                access_token=access_token,
+                refresh_token=token_data.get("refresh_token"),
+                expires_at=token_expires_at(token_data.get("expires_in")),
+            )
+            db.create_audit_log(
+                AuditAction.CONNECT_X,
+                user_id=user.id,
+                x_username=user.x_username,
+            )
+        db.delete_oauth_pkce(state)
         st.session_state.user_id = user.id
         st.session_state.x_username = user.x_username
         st.session_state.pop("x_auth_url", None)
+        st.session_state.pop("oauth_error", None)
+        st.session_state.pop("oauth_handled_code", None)
         st.query_params.clear()
         st.rerun()
     except Exception as exc:
         logger.exception("OAuth callback failed")
-        st.error(f"X login failed: {friendly_error(exc)}")
+        st.session_state.pop("oauth_handled_code", None)
+        st.session_state["oauth_error"] = f"X login failed: {friendly_error(exc)}"
         st.query_params.clear()
 
 
@@ -187,12 +199,18 @@ def render_login():
         )
     st.caption(f"OAuth callback URL: `{callback_url}`")
 
+    oauth_error = st.session_state.pop("oauth_error", None)
+    if oauth_error:
+        st.error(oauth_error)
+
     if st.button("Connect with X", type="primary"):
         try:
+            st.session_state.pop("oauth_handled_code", None)
+            st.session_state.pop("oauth_error", None)
             auth_url, oauth_state, code_verifier = start_oauth_flow(
                 redirect_uri=callback_url
             )
-            get_db().save_oauth_pkce(oauth_state, code_verifier)
+            get_db().save_oauth_pkce(oauth_state, code_verifier, callback_url)
             st.session_state["x_auth_url"] = auth_url
             st.rerun()
         except Exception as exc:

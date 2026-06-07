@@ -3,6 +3,7 @@ Database manager for Social Media Automation System.
 Handles database initialization, connections, and CRUD operations.
 """
 
+import json
 from typing import Optional, List, Dict, Any
 from datetime import datetime, timedelta
 from contextlib import contextmanager
@@ -163,8 +164,14 @@ class DatabaseManager:
     # User & OAuth Operations
     # ========================================
 
-    def save_oauth_pkce(self, state: str, code_verifier: str) -> None:
+    def save_oauth_pkce(
+        self,
+        state: str,
+        code_verifier: str,
+        redirect_uri: str,
+    ) -> None:
         cutoff = datetime.utcnow() - timedelta(minutes=15)
+        payload = json.dumps({"v": code_verifier, "r": redirect_uri.rstrip("/")})
         with self.get_session() as session:
             stale = select(OAuthPkceSession).where(OAuthPkceSession.created_at < cutoff)
             for row in session.scalars(stale).all():
@@ -172,18 +179,30 @@ class DatabaseManager:
             session.add(
                 OAuthPkceSession(
                     state=state,
-                    code_verifier_encrypted=encrypt_value(code_verifier),
+                    code_verifier_encrypted=encrypt_value(payload),
                 )
             )
 
-    def consume_oauth_pkce(self, state: str) -> Optional[str]:
+    def get_oauth_pkce(self, state: str) -> Optional[Dict[str, str]]:
         with self.get_session() as session:
             row = session.get(OAuthPkceSession, state)
             if not row:
                 return None
-            verifier = decrypt_value(row.code_verifier_encrypted)
-            session.delete(row)
-            return verifier
+            try:
+                payload = json.loads(decrypt_value(row.code_verifier_encrypted))
+                return {
+                    "code_verifier": payload["v"],
+                    "redirect_uri": payload.get("r", ""),
+                }
+            except (ValueError, KeyError, json.JSONDecodeError):
+                verifier = decrypt_value(row.code_verifier_encrypted)
+                return {"code_verifier": verifier, "redirect_uri": ""}
+
+    def delete_oauth_pkce(self, state: str) -> None:
+        with self.get_session() as session:
+            row = session.get(OAuthPkceSession, state)
+            if row:
+                session.delete(row)
 
     def upsert_user(self, x_user_id: str, x_username: str) -> User:
         with self.get_session() as session:
