@@ -1,117 +1,128 @@
 # SignalDraft
 
-**Multi-agent AI pipeline that researches live trends, drafts tweets, and publishes to X — only after human approval.**
+**Research live news. Draft with AI. Publish to X — only after you approve.**
 
+[![Live App](https://img.shields.io/badge/app-live-1DA1F2?style=for-the-badge)](https://signaldraft.streamlit.app/)
+[![Demo](https://img.shields.io/badge/demo-watch%20now-FF4B4B?style=for-the-badge)](https://tinyurl.com/signaldraft)
 [![Python 3.12+](https://img.shields.io/badge/python-3.12+-blue.svg)](https://www.python.org/downloads/)
 [![LangGraph](https://img.shields.io/badge/orchestration-LangGraph-purple.svg)](https://github.com/langchain-ai/langgraph)
 [![Streamlit](https://img.shields.io/badge/UI-Streamlit-red.svg)](https://streamlit.io)
-[![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
-
-> Connect your X account → enter a topic → agents research Hacker News & RSS → Gemini drafts a tweet → you review → publish to **your** account.
 
 ---
 
-## What makes this project different
+## Links
 
-Most “AI Twitter bots” are single-prompt scripts. **SignalDraft** is a **production-shaped** system:
+| | |
+|---|---|
+| **Live app** | [signaldraft.streamlit.app](https://signaldraft.streamlit.app/) |
+| **Full demo** | [tinyurl.com/signaldraft](https://tinyurl.com/signaldraft) |
+| **Source code** | [github.com/Rana-Hassan7272/SocialMedia_Automation_Agent](https://github.com/Rana-Hassan7272/SocialMedia_Automation_Agent) |
 
-| Capability | Implementation |
-|------------|----------------|
-| Multi-agent orchestration | LangGraph state machine with 6 specialized agents |
-| Human-in-the-loop safety | Pipeline pauses before publish — nothing posts without approval |
-| Multi-user X login | OAuth 2.0 + PKCE per user; tokens encrypted at rest (Fernet) |
-| Resilient LLM layer | Google Gemini primary → Groq automatic fallback on rate limits |
-| Multi-source research | **Hacker News API + RSS feeds** (no keys); Reddit optional |
-| Production database | Neon PostgreSQL + Alembic migrations + audit log |
-| Rate limiting | Per-user daily caps on workflows, LLM calls, and publishes |
-| Deploy-ready | Streamlit Cloud + `.streamlit` config + secrets template |
+> The demo shows the complete flow: topic → multi-source research → AI draft → human approval → automatic post to X.
+
+---
+
+## The problem
+
+Staying relevant on X means constantly reading news, filtering noise, writing sharp posts, and hitting publish — every day. Most teams either:
+
+- Spend hours manually scanning feeds and drafting, or
+- Use risky auto-bots that post without review and damage brand trust.
+
+**SignalDraft solves both:** automation where it helps, human control where it matters.
+
+---
+
+## What SignalDraft does
+
+1. **You enter a topic** — e.g. *"What's happening in AI agents today?"*
+2. **Agents research** — Hacker News + RSS headlines (no API keys required for research)
+3. **AI drafts a tweet** — Google Gemini (Groq fallback) writes a ≤280 character post
+4. **You review** — Approve, request a revision, or reject
+5. **One click publishes** — Approved drafts go to **your** connected X account
+
+Nothing posts without your explicit approval.
+
+---
+
+## Why this is different
+
+| Typical AI bot | SignalDraft |
+|----------------|-------------|
+| Single prompt → post | 6-agent LangGraph pipeline |
+| No research step | Live HN + RSS research |
+| Auto-posts blindly | Human-in-the-loop gate before publish |
+| One shared API key | Per-user OAuth + encrypted tokens |
+| Breaks on LLM limits | Gemini primary → Groq automatic fallback |
+| Demo-quality code | Production DB, migrations, audit log, rate limits |
+
+### Built for real-world use
+
+- **Multi-agent orchestration** — Intent → Research → Filter → Summarize → Draft → Publish
+- **Human-in-the-loop safety** — Pipeline pauses until you approve
+- **Multi-source research** — Hacker News API + RSS (Reddit optional)
+- **Resilient AI** — Gemini primary, Groq fallback on quota/errors
+- **Secure auth** — OAuth 2.0 PKCE, Fernet-encrypted tokens, Neon PostgreSQL
+- **Rate limiting** — Per-user daily caps on workflows, AI calls, and publishes
+- **Audit trail** — Connect, workflow, and publish events logged server-side
+
+---
+
+## Status: live & invite-only
+
+SignalDraft is **fully built and deployed**. The engineering work is done:
+
+- Streamlit UI live at [signaldraft.streamlit.app](https://signaldraft.streamlit.app/)
+- Neon PostgreSQL, Alembic migrations, background jobs
+- OAuth login, encrypted token storage, publish pipeline
+- 27 automated tests passing
+
+**What remains is operational, not development:** X (Twitter) API is **pay-as-you-go**. Free-tier API access does not support full multi-user OAuth posting for the public. Enabling posting for a new user requires X Developer billing to be activated for that account.
+
+**Want access?** Contact me directly — I enable accounts on request.
+
+---
+
+## Watch the demo
+
+The full end-to-end recording is here:
+
+**[https://tinyurl.com/signaldraft](https://tinyurl.com/signaldraft)**
+
+It shows:
+
+- Research agents pulling live signals
+- AI generating a draft from real news
+- Human approval step in the UI
+- Successful publish to X
 
 ---
 
 ## Architecture
 
 ```mermaid
-flowchart TB
-    subgraph UI["Streamlit UI (app.py)"]
-        Login[X OAuth 2.0 Login]
-        Query[User Query]
-        Review[Draft Review]
-        Publish[Approve & Publish]
-    end
-
-    subgraph Orchestration["LangGraph Workflow"]
-        Intent[Intent Agent]
-        Research[Research Agent]
-        Filter[Filtering Agent]
-        Summarize[Summarization Agent]
-        Draft[Drafting Agent]
-        HITL{{Human Review}}
-        Pub[Publishing Agent]
-    end
-
-    subgraph Sources["Research Sources — no keys required"]
-        HN[Hacker News API]
-        RSS[RSS / Google News]
-        Reddit[(Reddit — optional)]
-    end
-
-    subgraph LLM["LLM Layer"]
-        Gemini[Google Gemini]
-        Groq[Groq Fallback]
-    end
-
-    subgraph Data["Neon PostgreSQL"]
-        Users[Users + OAuth Tokens]
-        Workflows[Workflows + Phases]
-        Audit[Audit Log]
-    end
-
-    Login --> Query --> Intent
-    Intent --> Research
-    Research --> HN & RSS & Reddit
-    Research --> Filter --> Summarize --> Draft --> HITL
-    HITL -->|approve| Pub
-    HITL -->|revise| Draft
-  Intent & Research & Filter & Summarize & Draft --> Gemini
-    Gemini -.->|429 / quota| Groq
-    Pub --> X[X / Twitter API]
-    Orchestration --> Data
-    UI --> Data
+flowchart LR
+    A[Your topic] --> B[Intent Agent]
+    B --> C[Research Agent]
+    C --> D[HN + RSS]
+    D --> E[Filter → Summarize → Draft]
+    E --> F{You approve?}
+    F -->|Yes| G[Publish to X]
+    F -->|Revise| E
+    F -->|Reject| H[Discard]
 ```
 
 ### Agent pipeline
 
 ```
 User query
-    │
-    ▼
-┌─────────────┐   topic, scope, tone
-│ Intent      │   Understand what to research
-└──────┬──────┘
-       ▼
-┌─────────────┐   Hacker News + RSS (+ Reddit if configured)
-│ Research    │   ReAct-style strategy → multi-source fetch
-└──────┬──────┘
-       ▼
-┌─────────────┐   Top-K by relevance & engagement
-│ Filter      │
-└──────┬──────┘
-       ▼
-┌─────────────┐   Summary + key trends
-│ Summarize   │
-└──────┬──────┘
-       ▼
-┌─────────────┐   ≤280 char tweet draft
-│ Draft       │◄── revision loop
-└──────┬──────┘
-       ▼
-┌─────────────┐   PAUSE — Streamlit review UI
-│ Human Review│   Approve / Revise / Reject
-└──────┬──────┘
-       ▼
-┌─────────────┐   Post to user's X via OAuth token
-│ Publish     │
-└─────────────┘
+    → Intent      (topic, scope, tone)
+    → Research    (Hacker News + RSS)
+    → Filter      (top signals by relevance)
+    → Summarize   (key insights + trends)
+    → Draft       (≤280 char tweet)
+    → Human review (approve / revise / reject)
+    → Publish     (your X account via OAuth)
 ```
 
 ---
@@ -123,164 +134,77 @@ User query
 | Language | Python 3.12+ |
 | UI | Streamlit |
 | Agents | LangGraph + LangChain |
-| Primary LLM | Google Gemini (`gemini-3.1-flash-lite`) |
-| Fallback LLM | Groq (`llama-3.3-70b-versatile`) |
+| Primary LLM | Google Gemini |
+| Fallback LLM | Groq |
 | Database | SQLAlchemy 2.0, Alembic, Neon PostgreSQL |
-| Auth | X OAuth 2.0 PKCE, Fernet token encryption |
-| Research | Hacker News Firebase API, RSS/Atom (feedparser), PRAW optional |
-| Testing | pytest (27 tests) |
+| Auth | X OAuth 2.0 PKCE, Fernet encryption |
+| Research | Hacker News API, RSS/Atom (feedparser) |
+| Testing | pytest |
 
 ---
 
-## Quick start
+## For developers
 
-### 1. Clone & install
+### Quick start (local)
 
 ```bash
-git clone https://github.com/YOUR_USERNAME/social_media_automation.git
-cd social_media_automation
+git clone https://github.com/Rana-Hassan7272/SocialMedia_Automation_Agent.git
+cd SocialMedia_Automation_Agent
 python -m venv venv
 source venv/Scripts/activate   # Windows Git Bash
 pip install -r requirements.txt
-```
-
-### 2. Configure environment
-
-```bash
 cp .env.example .env
-python generate_encryption_key.py   # copy output to ENCRYPTION_KEY
+python generate_encryption_key.py
+python main.py migrate
+python main.py verify
+python main.py
 ```
 
-**Required for full app:**
+Open **http://localhost:8501**
+
+### Required environment
 
 | Variable | Purpose |
 |----------|---------|
 | `GOOGLE_API_KEY` | Primary LLM (Gemini) |
 | `GROQ_API_KEY` | Fallback LLM |
-| `DATABASE_URL` | Neon PostgreSQL connection string |
+| `DATABASE_URL` | Neon PostgreSQL |
 | `TWITTER_CLIENT_ID` | X OAuth 2.0 Client ID |
 | `TWITTER_CLIENT_SECRET` | X OAuth 2.0 Client Secret |
-| `TWITTER_CALLBACK_URL` | `http://localhost:8501` locally |
+| `TWITTER_CALLBACK_URL` | `http://localhost:8501/` locally |
 | `ENCRYPTION_KEY` | Fernet key for token storage |
 
-**Research works without Reddit keys** — Hacker News + RSS need no registration.
+Research works without Reddit keys — Hacker News + RSS need no registration.
 
-### 3. Initialize & verify
-
-```bash
-python main.py migrate
-python main.py verify
-python -m pytest tests/ -v
-```
-
-### 4. Run
-
-```bash
-python main.py
-```
-
-Open **http://localhost:8501** → Connect with X → enter a topic → review draft → publish.
-
----
-
-## Research sources
-
-| Source | Keys needed | Best for |
-|--------|-------------|----------|
-| **Hacker News API** | None | Tech, AI, startups |
-| **RSS feeds** | None | World news, business, technology |
-| Google News RSS | None | Query-specific headlines |
-| Reddit (PRAW) | Optional | Subreddit discussions — if you have legacy API access |
-
-> Reddit closed self-service app creation in 2026. SignalDraft defaults to **HN + RSS** so the pipeline works out of the box.
-
----
-
-## X / Twitter setup
-
-1. [X Developer Portal](https://developer.twitter.com/) → create project & app
-2. Enable **OAuth 2.0** → type **Web App**
-3. Callback URL: `http://localhost:8501` (local) or `https://your-app.streamlit.app` (deploy)
-4. Permissions: **Read and write**
-5. Copy **OAuth 2.0 Client ID** and **Client Secret** (not OAuth 1.0 API keys)
-
-```bash
-python check_x_oauth.py
-python check_twitter_config.py
-```
-
----
-
-## Deploy (Streamlit Cloud — free)
-
-1. Push repo to GitHub
-2. [share.streamlit.io](https://share.streamlit.io) → New app → `app.py`
-3. Add secrets from `.streamlit/secrets.toml.example`
-4. Set `TWITTER_CALLBACK_URL` to your Streamlit URL
-5. Update X portal callback to match
-6. Run `python main.py migrate` against Neon once
-
-```bash
-python main.py verify
-```
-
----
-
-## Project structure
-
-```
-social_media_automation/
-├── app.py                      # Streamlit UI
-├── main.py                     # CLI entrypoint
-├── src/
-│   ├── agents/                 # Intent, Research, Filter, Summarize, Draft, Publish
-│   ├── auth/                   # OAuth 2.0 PKCE, encryption, token refresh
-│   ├── config/                 # Pydantic settings
-│   ├── database/               # SQLAlchemy models + db_manager
-│   ├── services/               # Background job runner
-│   ├── utils/                  # HN, RSS, Reddit, Twitter, LLM fallback
-│   └── workflow/               # LangGraph graph + state
-├── alembic/                    # Database migrations
-├── tests/                      # pytest suite
-└── .streamlit/                 # Cloud config + secrets template
-```
-
----
-
-## CLI commands
+### CLI
 
 | Command | Description |
 |---------|-------------|
 | `python main.py` | Launch Streamlit app |
-| `python main.py verify` | Validate all services |
-| `python main.py migrate` | Run Alembic migrations |
-| `python main.py init-db` | Create tables (SQLite dev) |
-| `python demo_simulation.py` | Offline pipeline demo |
-| `python demo_complete_pipeline.py` | Full CLI with legacy X keys |
+| `python main.py verify` | Validate services |
+| `python main.py migrate` | Run database migrations |
+| `python -m pytest tests/ -v` | Run test suite |
 
 ---
 
-## Security & compliance
+## Security
 
-- OAuth tokens encrypted with **Fernet** before database storage
-- PKCE verifiers stored server-side during OAuth handshake
-- **Audit log** for connect, disconnect, workflow, and publish events
-- Input sanitization on user queries and revision feedback
-- Per-user rate limits (configurable via `.env`)
-- Human approval required before any post goes live
-- Research uses official public APIs (HN, RSS); no scraping of paywalled content
-
----
-
-## CV / portfolio pitch
-
-> Built **SignalDraft**, a production-grade multi-agent system using **LangGraph** that aggregates **Hacker News and RSS** research, generates social drafts with **Gemini/Groq**, and publishes to **X via OAuth 2.0** after human review — deployed on **Streamlit Cloud** with **Neon PostgreSQL**, encrypted tokens, Alembic migrations, and a full audit trail.
+- OAuth tokens encrypted at rest (Fernet)
+- Human approval required before any publish
+- Input sanitization on queries and feedback
+- Per-user rate limits
+- Audit log for connect, workflow, and publish events
+- Official public APIs only (HN, RSS) — no paywall scraping
 
 ---
 
-## License
+## Contact & access
 
-MIT — see [LICENSE](LICENSE) if present.
+SignalDraft is production-ready. To use it with your X account, **contact me** and I will enable API access for you.
+
+- **GitHub:** [Rana-Hassan7272/SocialMedia_Automation_Agent](https://github.com/Rana-Hassan7272/SocialMedia_Automation_Agent)
+- **Live app:** [signaldraft.streamlit.app](https://signaldraft.streamlit.app/)
+- **Demo:** [tinyurl.com/signaldraft](https://tinyurl.com/signaldraft)
 
 ---
 

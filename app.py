@@ -23,15 +23,19 @@ from src.workflow.graph import WorkflowGraph
 setup_logging()
 logger = get_logger(__name__)
 
+DEMO_URL = "https://tinyurl.com/signaldraft"
+LIVE_URL = "https://signaldraft.streamlit.app/"
+GITHUB_URL = "https://github.com/Rana-Hassan7272/SocialMedia_Automation_Agent"
+
 PHASE_LABELS = {
-    WorkflowPhase.PENDING.value: "Pending",
-    WorkflowPhase.INTENT.value: "Understanding intent",
-    WorkflowPhase.RESEARCH.value: "Researching Reddit",
-    WorkflowPhase.FILTER.value: "Filtering content",
+    WorkflowPhase.PENDING.value: "Starting",
+    WorkflowPhase.INTENT.value: "Understanding your topic",
+    WorkflowPhase.RESEARCH.value: "Researching Hacker News & RSS",
+    WorkflowPhase.FILTER.value: "Filtering best signals",
     WorkflowPhase.SUMMARIZE.value: "Summarizing insights",
-    WorkflowPhase.DRAFT.value: "Drafting tweet",
-    WorkflowPhase.DRAFT_READY.value: "Draft ready for review",
-    WorkflowPhase.PUBLISHING.value: "Publishing",
+    WorkflowPhase.DRAFT.value: "Writing your draft",
+    WorkflowPhase.DRAFT_READY.value: "Ready for your review",
+    WorkflowPhase.PUBLISHING.value: "Publishing to X",
     WorkflowPhase.PUBLISHED.value: "Published",
     WorkflowPhase.FAILED.value: "Failed",
     WorkflowPhase.CANCELLED.value: "Cancelled",
@@ -47,6 +51,68 @@ TERMS_TEXT = (
     "AI-generated drafts may be inaccurate, and agree to review content before publishing. "
     "You are responsible for posts published from your account."
 )
+
+
+def inject_styles():
+    st.markdown(
+        """
+        <style>
+        .sd-hero {
+            padding: 1.5rem 0 0.5rem 0;
+        }
+        .sd-tagline {
+            font-size: 1.15rem;
+            color: #9FB3C8;
+            margin-bottom: 1.25rem;
+        }
+        .sd-card {
+            background: linear-gradient(135deg, #151B24 0%, #1A2332 100%);
+            border: 1px solid #243044;
+            border-radius: 14px;
+            padding: 1.1rem 1.25rem;
+            margin-bottom: 0.85rem;
+        }
+        .sd-card h4 {
+            margin: 0 0 0.35rem 0;
+            color: #F4F7FB;
+        }
+        .sd-card p {
+            margin: 0;
+            color: #9FB3C8;
+            font-size: 0.95rem;
+        }
+        .sd-pill {
+            display: inline-block;
+            background: #1DA1F2;
+            color: white;
+            padding: 0.2rem 0.65rem;
+            border-radius: 999px;
+            font-size: 0.78rem;
+            font-weight: 600;
+            margin-right: 0.4rem;
+            margin-bottom: 0.4rem;
+        }
+        .sd-access {
+            background: #122033;
+            border: 1px solid #1DA1F2;
+            border-radius: 12px;
+            padding: 1rem 1.2rem;
+            margin: 1rem 0 1.25rem 0;
+        }
+        .sd-connect-btn a {
+            display: inline-block;
+            padding: 0.7rem 1.4rem;
+            background: #1DA1F2;
+            color: white !important;
+            text-decoration: none;
+            border-radius: 8px;
+            font-weight: 600;
+        }
+        div[data-testid="stStatusWidget"] { display: none; }
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
 
 
 def init_session():
@@ -77,7 +143,7 @@ def restore_user_session(db: DatabaseManager):
         st.session_state.sd_session = token
 
 
-DB_CACHE_VERSION = "oauth-v8"
+DB_CACHE_VERSION = "live-v1"
 
 
 @st.cache_resource
@@ -130,8 +196,7 @@ def handle_oauth_callback(db: DatabaseManager) -> bool:
     params = st.query_params
     oauth_error = _query_param(params, "error")
     if oauth_error:
-        detail = _query_param(params, "error_description") or oauth_error
-        st.session_state["oauth_error"] = f"X authorization failed: {detail}"
+        st.session_state["oauth_error"] = "X authorization was cancelled. Try again when ready."
         st.query_params.clear()
         return True
     code = _query_param(params, "code")
@@ -148,13 +213,13 @@ def handle_oauth_callback(db: DatabaseManager) -> bool:
     except ValueError as exc:
         pkce = db.get_oauth_pkce(state)
         if not pkce:
-            st.session_state["oauth_error"] = str(exc)
+            st.session_state["oauth_error"] = friendly_x_login_error(exc)
             st.query_params.clear()
             return True
     redirect_uri = pkce["redirect_uri"]
     st.session_state["oauth_handled_code"] = code
     try:
-        with st.spinner("Completing X login — please wait..."):
+        with st.spinner("Connecting your X account…"):
             token_data = exchange_code_for_token(
                 code,
                 pkce["code_verifier"],
@@ -221,22 +286,70 @@ def disconnect_x(db: DatabaseManager):
     st.rerun()
 
 
+def render_hero():
+    st.markdown('<div class="sd-hero">', unsafe_allow_html=True)
+    st.title("SignalDraft")
+    st.markdown(
+        '<p class="sd-tagline">Turn live news into publish-ready X posts — researched, drafted, '
+        "and posted only after you approve.</p>",
+        unsafe_allow_html=True,
+    )
+    st.markdown(
+        '<span class="sd-pill">Live</span>'
+        '<span class="sd-pill">Human-in-the-loop</span>'
+        '<span class="sd-pill">Multi-agent AI</span>',
+        unsafe_allow_html=True,
+    )
+    st.markdown("</div>", unsafe_allow_html=True)
+
+
+def render_features():
+    features = [
+        ("Research", "Scans Hacker News and RSS for real-time signals on your topic."),
+        ("Draft", "Gemini writes a concise, on-brand tweet from what matters most."),
+        ("Review", "You approve, revise, or reject — nothing posts without you."),
+        ("Publish", "One click sends the approved draft to your connected X account."),
+    ]
+    cols = st.columns(2)
+    for idx, (title, body) in enumerate(features):
+        with cols[idx % 2]:
+            st.markdown(
+                f'<div class="sd-card"><h4>{title}</h4><p>{body}</p></div>',
+                unsafe_allow_html=True,
+            )
+
+
+def render_demo_and_access():
+    st.markdown("### See it in action")
+    st.link_button("Watch full demo", DEMO_URL, type="primary", use_container_width=False)
+    st.caption("End-to-end flow: research → AI draft → human approval → post to X.")
+
+    st.markdown(
+        """
+        <div class="sd-access">
+        <strong>Invite-only access</strong><br>
+        The app is live and fully built. X API is <em>pay-as-you-go</em> — new accounts need
+        billing enabled on the X Developer Portal before posting works.
+        <br><br>
+        Want to use SignalDraft? Contact me directly and I will enable your account.
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+    st.link_button("Contact via GitHub", GITHUB_URL, type="secondary")
+
+
 def render_login():
     settings = get_settings()
-    st.subheader("Connect your X account")
-    if not settings.is_oauth_configured():
-        st.error("Server missing TWITTER_CLIENT_ID and TWITTER_CLIENT_SECRET.")
-        return
-    if not settings.encryption_key:
-        st.error("Server missing ENCRYPTION_KEY for secure token storage.")
+    if not settings.is_oauth_configured() or not settings.encryption_key:
+        st.info("Sign-in is being configured. Watch the demo above or contact us for access.")
         return
 
-    callback_url = _app_base_url()
-    st.caption(f"OAuth callback URL: `{callback_url}`")
+    st.markdown("### Connect your X account")
     oauth_error = st.session_state.get("oauth_error")
     if oauth_error:
         st.error(oauth_error)
-        if st.button("Clear error and start over", type="secondary"):
+        if st.button("Try again", type="secondary"):
             for key in (
                 "oauth_error",
                 "x_auth_url",
@@ -249,75 +362,31 @@ def render_login():
             st.query_params.clear()
             st.rerun()
 
-    st.markdown("#### Step 1 — Log into X first")
-    st.link_button("Open x.com and log in", "https://x.com", type="secondary")
-    st.caption(
-        "Use your **X email/username + password** on x.com. "
-        "Do **not** use “Sign in with Google” — that causes FedCM console errors."
-    )
-
-    st.markdown("#### Step 2 — Authorize SignalDraft")
-    if st.button("Prepare authorization link", type="primary"):
+    callback_url = _app_base_url()
+    if st.button("Connect to X", type="primary", use_container_width=True):
         try:
             st.session_state.pop("oauth_handled_code", None)
             st.session_state.pop("oauth_error", None)
             st.session_state["x_auth_url"] = start_oauth_flow(redirect_uri=callback_url)
             st.rerun()
-        except Exception as exc:
-            st.error(str(exc))
+        except Exception:
+            st.error("Could not start X login. Please try again.")
 
     auth_url = st.session_state.get("x_auth_url")
-    if not auth_url:
-        st.caption("Click **Prepare authorization link** first, then open X in the new tab.")
-        return
-
-    st.markdown(
-        f'<a href="{auth_url}" target="_blank" rel="noopener noreferrer" '
-        f'style="display:inline-block;padding:0.65rem 1.25rem;background:#1DA1F2;'
-        f'color:white;text-decoration:none;border-radius:0.45rem;font-weight:600;">'
-        f"Authorize SignalDraft on X (new tab) →</a>",
-        unsafe_allow_html=True,
-    )
-
-    st.markdown("#### Step 3 — Finish on the redirect tab")
-    st.info(
-        "On X click **Authorize app** (not only log in). "
-        "X sends you back to SignalDraft in **that same tab** with "
-        "**Completing X login…** then **Connected as @you**.\n\n"
-        "**Ignore browser console errors** like FedCM / GSI_LOGGER — those are from "
-        "X’s Google sign-in button, not SignalDraft."
-    )
-
-    with st.expander("Still stuck? Troubleshooting"):
+    if auth_url:
         st.markdown(
-            f"""
-1. Log into [x.com](https://x.com) with **email/password** (not Google).
-2. Click **Authorize SignalDraft on X** above — opens a **new tab**.
-3. On the X page, if asked to log in again, use **username/password** on that page.
-4. Click **Authorize** / **Allow** for SignalDraft.
-5. Stay in the tab X redirects to (`{callback_url}`) — do not switch tabs.
-6. Try **Chrome Incognito** or **Firefox** if Chrome blocks sign-in.
-7. Callback URL in X Developer Portal must be exactly: `{callback_url}`
-            """
+            f'<div class="sd-connect-btn"><a href="{auth_url}" target="_blank" '
+            f'rel="noopener noreferrer">Authorize on X →</a></div>',
+            unsafe_allow_html=True,
         )
-        st.code(auth_url, language=None)
-        st.warning(
-            "If X shows **Something went wrong** before Authorize: click **Clear error**, "
-            "**Prepare authorization link** again, and use a fresh link. Do not reuse an old tab."
-        )
+        st.caption("Log into X, click Authorize, then return here to finish.")
 
     if settings.is_twitter_configured():
-        st.divider()
-        st.markdown("#### Alternative — your X account (legacy keys)")
-        st.caption(
-            "Skips OAuth 2.0. Add TWITTER_API_KEY, TWITTER_API_SECRET, "
-            "TWITTER_ACCESS_TOKEN, TWITTER_ACCESS_TOKEN_SECRET to Streamlit secrets."
-        )
-        if st.button("Continue with legacy X keys", type="secondary"):
+        if st.button("Continue with pre-enabled account", type="secondary"):
             try:
                 client = TwitterClient.from_legacy_env()
                 me = client.client.get_me(user_fields=["username"])
-                username = me.data.username if me.data else "legacy_user"
+                username = me.data.username if me.data else "user"
                 user = get_db().upsert_user(str(me.data.id), username)
                 st.session_state.user_id = user.id
                 st.session_state.x_username = username
@@ -333,7 +402,7 @@ def render_workflow_status(db: DatabaseManager, workflow_id: int, status_slot):
     if not workflow:
         return None
     label = PHASE_LABELS.get(workflow.phase.value, workflow.phase.value)
-    status_slot.info(f"Workflow #{workflow_id}: **{label}**")
+    status_slot.info(f"**{label}** — agents are working on your request.")
     return workflow
 
 
@@ -359,11 +428,11 @@ def poll_background_job(db, workflow_graph, job_runner, workflow_id: int, status
     if workflow.phase == WorkflowPhase.DRAFT_READY and workflow.thread_id:
         st.session_state.thread_id = workflow.thread_id
         st.session_state.active_workflow_id = None
-        st.success("Draft ready for your review.")
+        st.success("Your draft is ready for review.")
         st.rerun()
     elif workflow.phase == WorkflowPhase.FAILED:
         st.session_state.active_workflow_id = None
-        st.error(workflow.error_message or "Workflow failed.")
+        st.error("We could not finish this request. Try a different topic.")
     else:
         st.session_state.active_workflow_id = None
 
@@ -371,19 +440,19 @@ def poll_background_job(db, workflow_graph, job_runner, workflow_id: int, status
 def render_review(workflow_graph: WorkflowGraph, thread_id: str):
     state = workflow_graph.get_state(thread_id)
     draft = state.get("draft_content", "")
-    st.subheader("Draft review")
+    st.subheader("Review your draft")
     st.text_area("Tweet preview", value=draft, height=140, disabled=True)
-    st.caption(f"{len(draft)}/280 characters")
+    st.caption(f"{len(draft)} / 280 characters")
 
     if state.get("summary"):
-        with st.expander("Research summary"):
+        with st.expander("What the agents found"):
             st.write(state.get("summary"))
             trends = state.get("key_trends") or []
             if isinstance(trends, str):
                 st.write(trends)
             else:
                 for trend in trends:
-                    st.write(f"- {trend}")
+                    st.write(f"• {trend}")
 
     col1, col2, col3 = st.columns(3)
     db = get_db()
@@ -391,7 +460,7 @@ def render_review(workflow_graph: WorkflowGraph, thread_id: str):
     limiter = RateLimiter(db)
 
     with col1:
-        if st.button("Approve & publish", type="primary"):
+        if st.button("Approve & publish", type="primary", use_container_width=True):
             try:
                 limiter.check_publish_limit(user_id)
                 twitter_client = get_twitter_client_for_user(user_id, db)
@@ -413,11 +482,11 @@ def render_review(workflow_graph: WorkflowGraph, thread_id: str):
             elif result.get("error"):
                 st.error(friendly_error(Exception(result["error"])))
             else:
-                st.warning("Workflow ended without publishing.")
+                st.warning("Draft was not published.")
 
     with col2:
-        feedback = st.text_input("Revision feedback", key="revision_feedback")
-        if st.button("Request revision"):
+        feedback = st.text_input("Revision notes", key="revision_feedback", placeholder="Make it shorter…")
+        if st.button("Request revision", use_container_width=True):
             try:
                 clean_feedback = sanitize_feedback(feedback)
             except AppError as exc:
@@ -434,13 +503,13 @@ def render_review(workflow_graph: WorkflowGraph, thread_id: str):
                 st.rerun()
 
     with col3:
-        if st.button("Reject"):
+        if st.button("Reject", use_container_width=True):
             workflow_graph.resume(
                 thread_id,
                 {"approved": False, "revision_requested": False, "rejected": True},
             )
             st.session_state.thread_id = None
-            st.info("Draft rejected.")
+            st.info("Draft discarded.")
             st.rerun()
 
 
@@ -453,9 +522,11 @@ def render_main(workflow_graph: WorkflowGraph):
     st.subheader("Create a post")
     query = st.text_input(
         "What should we research?",
-        placeholder="What's happening in AI today?",
+        placeholder="e.g. Latest breakthroughs in AI agents",
         max_chars=500,
+        label_visibility="collapsed",
     )
+    st.caption("Enter a topic — agents will research, draft, and pause for your approval.")
 
     status_slot = st.empty()
     if st.session_state.active_workflow_id:
@@ -467,11 +538,11 @@ def render_main(workflow_graph: WorkflowGraph):
             status_slot,
         )
 
-    if st.button("Run agent pipeline", type="primary"):
+    if st.button("Start research & draft", type="primary", use_container_width=True):
         try:
             clean_query = sanitize_user_query(query)
             if not settings.is_llm_configured():
-                st.error("No LLM configured. Set GOOGLE_API_KEY and/or GROQ_API_KEY.")
+                st.error("AI service is not available right now. Please try again later.")
                 return
             limiter.check_workflow_limit(user_id)
             limiter.check_llm_limit(user_id)
@@ -498,70 +569,69 @@ def render_main(workflow_graph: WorkflowGraph):
             st.error(friendly_error(exc))
 
     if st.session_state.thread_id and workflow_graph.is_interrupted(st.session_state.thread_id):
+        st.divider()
         render_review(workflow_graph, st.session_state.thread_id)
 
-    with st.expander("Your recent workflows"):
-        workflows = db.get_user_workflows(user_id, limit=10)
-        if not workflows:
-            st.write("No workflows yet.")
-        for wf in workflows:
-            phase = PHASE_LABELS.get(wf.phase.value, wf.phase.value)
-            st.write(f"#{wf.id} — {wf.user_query[:80]} — **{phase}** / {wf.status.value}")
-
-    with st.expander("Audit log"):
-        logs = db.get_user_audit_logs(user_id, limit=15)
-        if not logs:
-            st.write("No audit events yet.")
-        for entry in logs:
-            st.write(
-                f"{entry.created_at:%Y-%m-%d %H:%M} — **{entry.action.value}**"
-                + (f" — {entry.details}" if entry.details else "")
-            )
+    workflows = db.get_user_workflows(user_id, limit=5)
+    if workflows:
+        with st.expander("Recent requests"):
+            for wf in workflows:
+                phase = PHASE_LABELS.get(wf.phase.value, wf.phase.value)
+                st.write(f"**{wf.user_query[:70]}** — {phase}")
 
 
 def render_sidebar(db: DatabaseManager):
-    settings = get_settings()
+    username = st.session_state.x_username
+    display = username if username and username != "connected_user" else "your account"
     with st.sidebar:
-        st.write(f"Connected as **@{st.session_state.x_username}**")
-        if settings.is_postgres():
-            st.caption("Database: Neon PostgreSQL")
-        else:
-            st.caption("Database: SQLite (dev fallback)")
-        if st.button("Disconnect X"):
+        st.markdown(f"**@{display}**")
+        st.caption("Connected to X")
+        if st.button("Disconnect", use_container_width=True):
             disconnect_x(db)
+        st.divider()
+        st.link_button("Full demo", DEMO_URL, use_container_width=True)
         with st.expander("Privacy"):
             st.write(PRIVACY_TEXT)
-        with st.expander("Terms of use"):
+        with st.expander("Terms"):
             st.write(TERMS_TEXT)
-        st.caption("HTTPS is enforced by your hosting provider in production.")
 
 
 def main():
-    st.set_page_config(page_title="SignalDraft", page_icon="🐦", layout="centered")
+    st.set_page_config(
+        page_title="SignalDraft",
+        page_icon="🐦",
+        layout="centered",
+        initial_sidebar_state="collapsed",
+    )
+    inject_styles()
     init_session()
     db = get_db()
     restore_user_session(db)
     handle_oauth_callback(db)
     restore_user_session(db)
 
-    st.title("SignalDraft")
-    st.caption("Hacker News + RSS research → AI draft → publish to your X account")
-
     oauth_success = st.session_state.pop("oauth_success", None)
     if oauth_success:
         if oauth_success == "connected_user":
-            st.success("Connected to X. You can create posts below.")
+            st.success("Connected to X. You're ready to create posts.")
         else:
-            st.success(f"Connected as **@{oauth_success}**. You can create posts below.")
+            st.success(f"Connected as @{oauth_success}. You're ready to create posts.")
 
     if not st.session_state.user_id:
+        render_hero()
+        render_features()
+        st.divider()
+        render_demo_and_access()
+        st.divider()
         render_login()
         return
 
     render_sidebar(db)
+    st.title("SignalDraft")
+    st.caption("Research → draft → approve → publish")
 
     if not get_settings().is_llm_configured():
-        st.error("Server missing GOOGLE_API_KEY (primary) or GROQ_API_KEY (fallback).")
+        st.warning("AI drafting is temporarily unavailable.")
 
     render_main(get_workflow_graph())
 

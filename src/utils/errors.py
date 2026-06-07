@@ -29,16 +29,17 @@ def friendly_x_login_error(exc: Exception) -> str:
     text_lower = text.lower()
     if "client-not-enrolled" in text_lower or "attached to a project" in text_lower:
         return (
-            "X login tokens were issued but profile lookup failed (client-not-enrolled). "
-            "Add OAuth 1.0a legacy keys to Streamlit secrets as a workaround, or upgrade "
-            "X API access. Confirm TWITTER_CLIENT_ID is your OAuth 2.0 Client ID (c0hR...)."
+            "X API access is not enabled for this account yet. "
+            "SignalDraft uses pay-as-you-go X API billing — contact the administrator to activate access."
         )
     if "401" in text_lower and "unauthorized" in text_lower:
-        return (
-            "Legacy X keys were rejected (401). In Streamlit secrets use OAuth 1.0a values from "
-            "Keys and tokens (API Key, API Secret, Access Token, Access Token Secret) — "
-            "not the OAuth 2.0 Client ID/Secret. Regenerate tokens if needed."
-        )
+        return "X login could not be verified. Contact the administrator to enable your account."
+    if "token exchange failed" in text_lower or "redirect uri" in text_lower:
+        return "X login session expired. Click Connect to X and try again."
+    if "oauth session expired" in text_lower or "invalid oauth state" in text_lower:
+        return "Login session expired. Click Connect to X and try again."
+    if len(text) > 200:
+        return "X login failed. Please try again or contact the administrator."
     return text
 
 
@@ -52,13 +53,9 @@ def friendly_error(exc: Exception) -> str:
     if "timeout" in text_lower or "connection" in text_lower:
         return "Network error. Check your connection and try again."
     if any(token in text_lower for token in ("groq", "gemini", "google", "api key", "llm")):
-        return "AI service is unavailable. Contact the app administrator."
-    if "token exchange failed" in text_lower or "authorization failed" in text_lower:
-        return text
-    if "oauth session not found" in text_lower:
-        return text
+        return "AI service is temporarily unavailable. Please try again shortly."
     if "connect your x account" in text_lower:
         return text
     if "session expired" in text_lower and "disconnect" in text_lower:
         return text
-    return text if len(text) < 300 else "Something went wrong. Please try again."
+    return text if len(text) < 200 else "Something went wrong. Please try again."
