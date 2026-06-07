@@ -1,0 +1,50 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1040 100" role="img" aria-label="SignalDraft architecture flow">
+  <defs>
+    <marker id="arrow" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto">
+      <path d="M0,0 L8,4 L0,8 Z" fill="#5B6B7C"/>
+    </marker>
+    <style>
+      .box { fill:#151B24; stroke:#243044; stroke-width:1.5; rx:8; }
+      .diamond { fill:#151B24; stroke:#1DA1F2; stroke-width:1.5; }
+      .label { fill:#F4F7FB; font-family:Segoe UI,Arial,sans-serif; font-size:13px; font-weight:600; }
+      .small { fill:#9FB3C8; font-size:11px; font-weight:500; }
+      .line { stroke:#5B6B7C; stroke-width:1.5; fill:none; marker-end:url(#arrow); }
+    </style>
+  </defs>
+
+  <rect class="box" x="8" y="32" width="82" height="36"/>
+  <text class="label" x="49" y="54" text-anchor="middle">Your topic</text>
+
+  <line class="line" x1="90" y1="50" x2="118" y2="50"/>
+  <rect class="box" x="118" y="32" width="92" height="36"/>
+  <text class="label" x="164" y="54" text-anchor="middle">Intent Agent</text>
+
+  <line class="line" x1="210" y1="50" x2="238" y2="50"/>
+  <rect class="box" x="238" y="32" width="104" height="36"/>
+  <text class="label" x="290" y="54" text-anchor="middle">Research Agent</text>
+
+  <line class="line" x1="342" y1="50" x2="370" y2="50"/>
+  <rect class="box" x="370" y="32" width="72" height="36"/>
+  <text class="label" x="406" y="54" text-anchor="middle">HN + RSS</text>
+
+  <line class="line" x1="442" y1="50" x2="470" y2="50"/>
+  <rect class="box" x="470" y="32" width="158" height="36"/>
+  <text class="label" x="549" y="54" text-anchor="middle">Filter - Summarize - Draft</text>
+
+  <line class="line" x1="628" y1="50" x2="656" y2="50"/>
+  <polygon class="diamond" points="706,50 736,32 766,50 736,68"/>
+  <text class="label" x="736" y="54" text-anchor="middle">Approve?</text>
+
+  <line class="line" x1="766" y1="50" x2="794" y2="50"/>
+  <rect class="box" x="794" y="32" width="96" height="36"/>
+  <text class="label" x="842" y="54" text-anchor="middle">Publish to X</text>
+
+  <path class="line" d="M736 68 L736 84 L549 84 L549 68" marker-end="url(#arrow)"/>
+  <text class="small" x="642" y="96" text-anchor="middle">Revise</text>
+
+  <path class="line" d="M706 50 L678 50 L678 14 L950 14 L950 32" marker-end="url(#arrow)"/>
+  <rect class="box" x="914" y="0" width="72" height="32"/>
+  <text class="label" x="950" y="20" text-anchor="middle">Discard</text>
+  <text class="small" x="814" y="12" text-anchor="middle">Reject</text>
+  <text class="small" x="780" y="44" text-anchor="middle">Yes</text>
+</svg>

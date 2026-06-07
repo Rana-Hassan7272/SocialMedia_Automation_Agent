@@ -101,17 +101,21 @@ It shows:
 
 ## Architecture
 
+<p align="center">
+  <img src="docs/architecture.svg" alt="SignalDraft architecture: topic to intent, research, filter, draft, approve, publish to X" width="100%" />
+</p>
+
+### Agent pipeline
+
 ```
-Your topic
-    → Intent Agent        (topic, scope, tone)
-    → Research Agent      (Hacker News + RSS)
-    → Filter              (top signals by relevance)
-    → Summarize           (key insights + trends)
-    → Draft               (≤280 char tweet)
-    → Human review        (approve / revise / reject)
-         ├─ Approve  → Publish to X
-         ├─ Revise   → Draft (loop)
-         └─ Reject   → Discard
+User query
+    → Intent      (topic, scope, tone)
+    → Research    (Hacker News + RSS)
+    → Filter      (top signals by relevance)
+    → Summarize   (key insights + trends)
+    → Draft       (≤280 char tweet)
+    → Human review (approve / revise / reject)
+    → Publish     (your X account via OAuth)
 ```
 
 ---
