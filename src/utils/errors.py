@@ -24,6 +24,25 @@ class OAuthError(AppError):
         super().__init__(user_message, code="oauth_error", cause=cause)
 
 
+def friendly_x_login_error(exc: Exception) -> str:
+    text = str(exc)
+    text_lower = text.lower()
+    if "client-not-enrolled" in text_lower or "attached to a project" in text_lower:
+        return (
+            "X authorized login but your Developer App lacks API access. "
+            "Open developer.x.com → Projects → create or open a Project → "
+            "add this app → enable Free or Basic access → set app permissions to Read and write. "
+            "Then clear the error and authorize again."
+        )
+    if "401" in text_lower and "unauthorized" in text_lower:
+        return (
+            "Legacy X keys were rejected (401). In Streamlit secrets use OAuth 1.0a values from "
+            "Keys and tokens (API Key, API Secret, Access Token, Access Token Secret) — "
+            "not the OAuth 2.0 Client ID/Secret. Regenerate tokens if needed."
+        )
+    return text
+
+
 def friendly_error(exc: Exception) -> str:
     if isinstance(exc, AppError):
         return exc.user_message

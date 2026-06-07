@@ -14,7 +14,7 @@ from src.database import DatabaseManager
 from src.database.models import AuditAction, WorkflowPhase
 from src.services import get_job_runner
 from src.utils import RedditClient, TwitterClient
-from src.utils.errors import AppError, friendly_error
+from src.utils.errors import AppError, friendly_error, friendly_x_login_error
 from src.utils.logging_config import get_logger, setup_logging
 from src.utils.rate_limiter import RateLimiter
 from src.utils.sanitize import sanitize_feedback, sanitize_user_query
@@ -188,9 +188,7 @@ def handle_oauth_callback(db: DatabaseManager) -> bool:
     except Exception as exc:
         logger.exception("OAuth callback failed")
         st.session_state.pop("oauth_handled_code", None)
-        st.session_state["oauth_error"] = (
-            f"X login failed: {exc} (redirect_uri used: `{redirect_uri}`)"
-        )
+        st.session_state["oauth_error"] = friendly_x_login_error(exc)
         st.query_params.clear()
     return True
 
@@ -299,9 +297,8 @@ def render_login():
         )
         st.code(auth_url, language=None)
         st.warning(
-            "If X shows **400** in console: set Streamlit secret "
-            "`TWITTER_CALLBACK_URL=https://signaldraft.streamlit.app/` "
-            "(with trailing slash) and match it in X Developer Portal."
+            "If login fails with **client-not-enrolled**: your X app must be inside a "
+            "**Project** on developer.x.com with **Read and write** permissions."
         )
 
     if settings.is_twitter_configured():
@@ -323,7 +320,7 @@ def render_login():
                 st.session_state.pop("oauth_error", None)
                 st.rerun()
             except Exception as exc:
-                st.error(f"Legacy X login failed: {exc}")
+                st.error(friendly_x_login_error(exc))
 
 
 def render_workflow_status(db: DatabaseManager, workflow_id: int, status_slot):

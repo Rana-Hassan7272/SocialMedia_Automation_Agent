@@ -26,10 +26,16 @@ class TwitterClient:
         x_username: Optional[str] = None,
         refresh_token: Optional[str] = None,
         access_token_secret: Optional[str] = None,
+        consumer_key: Optional[str] = None,
+        consumer_secret: Optional[str] = None,
     ):
         settings = get_settings()
-        client_id = settings.twitter_client_id or settings.twitter_api_key
-        client_secret = settings.twitter_client_secret or settings.twitter_api_secret
+        if access_token_secret is not None:
+            client_id = consumer_key or settings.twitter_api_key
+            client_secret = consumer_secret or settings.twitter_api_secret
+        else:
+            client_id = consumer_key or settings.twitter_client_id
+            client_secret = consumer_secret or settings.twitter_client_secret
         if not client_id or not client_secret:
             raise ValueError("X API client credentials are not configured")
 
@@ -67,6 +73,8 @@ class TwitterClient:
         return cls(
             access_token=settings.twitter_access_token,
             access_token_secret=settings.twitter_access_token_secret,
+            consumer_key=settings.twitter_api_key,
+            consumer_secret=settings.twitter_api_secret,
             x_username=None,
         )
 
